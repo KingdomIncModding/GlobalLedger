@@ -41,7 +41,7 @@ namespace KingdomGlobalLedger
             }
         }
 
-        public const string Id = "urakka.kingdominc.globalledger", Version = "0.1.15";
+        public const string Id = "urakka.kingdominc.globalledger", Version = "0.1.16";
         internal static GlobalLedgerPlugin Instance;
         internal readonly LedgerBook Book = new LedgerBook(() => Time.realtimeSinceStartupAsDouble);
         internal readonly LedgerLocations Locations = new LedgerLocations();

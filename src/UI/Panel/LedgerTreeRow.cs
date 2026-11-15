@@ -67,7 +67,7 @@ namespace KingdomGlobalLedger
             data = value;
             Root.name = value.Key;
             Root.gameObject.SetActive(true);
-            nameScroll.Bind(value.Key, value.IconOnly ? "" : value.Label);
+            nameScroll.Bind(value.Key, value.Label);
             label.color = value.IsHeader || value.Depth == 0 ? LedgerUi.Gold : LedgerUi.Paper;
             label.fontStyle = value.IsHeader ? FontStyles.Bold : FontStyles.Normal;
             shade.color = value.IsHeader ? new Color(.28f, .16f, .10f, .85f)

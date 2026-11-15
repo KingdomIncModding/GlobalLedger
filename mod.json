@@ -1,7 +1,7 @@
 {
     "id":  "GlobalLedger",
     "name":  "Global Ledger",
-    "version":  "0.1.15",
+    "version":  "0.1.16",
     "author":  "Urakka",
     "description":  "For Kingdom Inc game version 1.0.14. Kingdom-wide currency net earnings and item production breakdown from a top Mod Bar dropdown in Kingdom Inc.",
     "repository":  {

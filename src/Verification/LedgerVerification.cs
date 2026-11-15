@@ -18,7 +18,7 @@ using UnityEngine;
 
 namespace KingdomGlobalLedger.Verification
 {
-    [BepInPlugin("urakka.kingdominc.globalledger.verification", "Global Ledger Verification", "0.1.15")]
+    [BepInPlugin("urakka.kingdominc.globalledger.verification", "Global Ledger Verification", "0.1.16")]
     [BepInDependency(GlobalLedgerPlugin.Id)]
     public sealed class LedgerVerification : BaseUnityPlugin
     {
@@ -67,7 +67,7 @@ namespace KingdomGlobalLedger.Verification
             try
             {
                 Check(original == null, "No user kingdom loaded");
-                Check(Chainloader.PluginInfos[GlobalLedgerPlugin.Id].Metadata.Version.ToString() == "0.1.15", "Global Ledger V1 0.1.15 loaded");
+                Check(Chainloader.PluginInfos[GlobalLedgerPlugin.Id].Metadata.Version.ToString() == "0.1.16", "Global Ledger V1 0.1.16 loaded");
                 VerifyAccounting();
                 VerifyNativeCallbacks();
                 VerifyLocations();

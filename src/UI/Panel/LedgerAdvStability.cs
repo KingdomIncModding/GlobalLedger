@@ -108,7 +108,6 @@ namespace KingdomGlobalLedger
                 GameCurrency = row.GameCurrency,
                 Item = row.Item,
                 Expandable = row.Expandable,
-                IconOnly = row.IconOnly,
                 PrefixIcon = row.PrefixIcon,
                 Icon = row.Icon,
                 Target = row.Target

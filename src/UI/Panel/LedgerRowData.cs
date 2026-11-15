@@ -26,7 +26,7 @@ namespace KingdomGlobalLedger
         internal long Amount, Income, Outflow;
         internal float Top;
         internal bool Expandable, Open;
-        internal bool IconOnly, IsHeader;
+        internal bool IsHeader;
         internal Sprite PrefixIcon, Icon;
         internal LedgerTarget Target;
     }

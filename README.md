@@ -1,6 +1,6 @@
 # Global Ledger
 
-**Global Ledger 0.1.15 — for Kingdom Inc game version 1.0.14.**
+**Global Ledger 0.1.16 — for Kingdom Inc game version 1.0.14.**
 
 [GitHub releases](https://github.com/KingdomIncModding/GlobalLedger/releases) · [Nexus Mods](https://www.nexusmods.com/kingdominc/mods/19)
 

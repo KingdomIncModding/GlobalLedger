@@ -206,7 +206,6 @@ namespace KingdomGlobalLedger
                             {
                                 var cost = Add(costs + "/" + (int)costCurrency, LedgerUi.CurrencyName(costCurrency), 4, costCurrency, -building.Spent[(int)costCurrency], false, 0, building.Spent[(int)costCurrency]);
                                 cost.Icon = costCurrency.GetIcon();
-                                cost.IconOnly = true;
                                 RememberAdvChild(costs, cost);
                                 any = true;
                             }
@@ -279,7 +278,6 @@ namespace KingdomGlobalLedger
                             {
                                 var cost = AddItem(costs + "/item/" + costItem.Identifier, LedgerUi.ItemName(costItem), 4, costItem, -spentItem, false, 0, spentItem);
                                 cost.Icon = costItem.GetIcon();
-                                cost.IconOnly = true;
                                 RememberAdvChild(costs, cost);
                                 any = true;
                             }
@@ -290,7 +288,6 @@ namespace KingdomGlobalLedger
                             {
                                 var cost = Add(costs + "/currency/" + (int)costCurrency, LedgerUi.CurrencyName(costCurrency), 4, costCurrency, -building.Spent[(int)costCurrency], false, 0, building.Spent[(int)costCurrency]);
                                 cost.Icon = costCurrency.GetIcon();
-                                cost.IconOnly = true;
                                 RememberAdvChild(costs, cost);
                                 any = true;
                             }

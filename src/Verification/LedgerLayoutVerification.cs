@@ -313,6 +313,7 @@ namespace KingdomGlobalLedger.Verification
             var anchor = ownerPanel.transform.parent.Find("Anchor").GetComponent<Button>();
             var tempPanel = LedgerPanel.Create(tempBook, anchor);
             var source = new LedgerBookSource("adv-stability-src", "Fixture", "Workshop", "Stability Smelter");
+            tempBook.Record(source, GameCurrency.Gold, 0, 50);
             tempBook.RecordItem(source, "iron_ore", 100, 0);
             tempBook.RecordItem(source, "iron_ingot", 20, 0);
             tempPanel.OpenPopup();
@@ -326,6 +327,14 @@ namespace KingdomGlobalLedger.Verification
                 tempPanel.ToggleRow("item/iron_ore");
                 string groupKey = tempPanel.VisibleRows.Single(r => r.Depth == 1 && r.Key.StartsWith("item/iron_ore/", StringComparison.Ordinal)).Key;
                 tempPanel.ToggleRow(groupKey);
+                string buildingKey = tempPanel.VisibleRows.Single(r => r.Depth == 2 && r.Key.StartsWith(groupKey + "/", StringComparison.Ordinal)).Key;
+                tempPanel.ToggleRow(buildingKey);
+                tempPanel.ToggleRow(buildingKey + "/costs");
+                var costRowTransform = tempPanel.Scroller.content.Cast<Transform>()
+                    .Single(child => child.gameObject.activeSelf && child.name == buildingKey + "/costs/currency/0");
+                Check(costRowTransform.Find("AssetIcon").GetComponent<Image>().enabled
+                    && costRowTransform.Find("NameViewport/Name").GetComponent<TMP_Text>().text == "Gold",
+                    "Operating cost rows display both the cost icon and item/currency name");
                 tempPanel.SetSort(2);
 
                 var initialOrder = tempPanel.VisibleRows.Where(r => r.Depth == 0 && r.Item != null).Select(r => r.Item.Identifier).ToArray();
