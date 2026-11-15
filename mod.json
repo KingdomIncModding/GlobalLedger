@@ -21,7 +21,7 @@
                                       "production",
                                       "ui"
                                   ],
-                       "latestTag":  "v0.1.13"
+                       "latestTag":  "v0.1.15"
                    },
     "distribution":  {
                          "nexus":  {
@@ -68,7 +68,7 @@
                         "gameIntegration":  "Foundation"
                     },
     "publishing":  {
-                       "githubReleases":  "https://github.com/KingdomIncModding/GlobalLedger/releases/tag/v0.1.13",
+                       "githubReleases":  "https://github.com/KingdomIncModding/GlobalLedger/releases/tag/v0.1.15",
                        "nexusMods":  "https://www.nexusmods.com/kingdominc/mods/19",
                        "archivePreviousReleases":  false
                    }
