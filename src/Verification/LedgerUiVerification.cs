@@ -33,20 +33,26 @@ namespace KingdomGlobalLedger.Verification
             if (!Try(Setup)) { Cleanup(); yield break; }
             yield return new WaitForSecondsRealtime(1);
             Try(VerifyBasic);
+            Try(VerifyButtonLabels);
             Try(VerifyNameClipping);
             Try(() => Capture("v1-basic-1920.png"));
             yield return new WaitForSecondsRealtime(.5f);
             Try(VerifyAdvanced);
+            Try(VerifyButtonLabels);
             Try(() => Capture("v1-production-1920.png"));
             yield return new WaitForSecondsRealtime(.5f);
             Try(VerifyControls);
+            Try(VerifyButtonLabels);
+            Try(VerifyLongestLabels);
             Try(VerifySmoothing);
+            Try(() => new LedgerLayoutVerification().Run(panel, checks));
+            Try(() => new LedgerFeedbackVerification().Run(panel, checks, output));
             Try(VerifyRightClick);
-            Try(() => { panel.SetSearch(""); panel.SetViewMode(LedgerPanel.ViewMode.Basic); panel.ToggleControls(); Capture("v1-collapsed-1920.png"); });
+            Try(() => { panel.SetSearch(""); panel.SetViewMode(LedgerPanel.ViewMode.Basic); panel.SelectTab(0); if (!panel.ControlsCollapsed) panel.ToggleControls(); Capture("v1-collapsed-1920.png"); });
             yield return new WaitForSecondsRealtime(.5f);
             Try(() => { panel.ToggleControls(); Screen.SetResolution(1280, 720, false); });
             yield return new WaitForSecondsRealtime(1);
-            Try(() => { Capture("v1-basic-1280.png"); VerifyFrameFits(); });
+            Try(() => { Capture("v1-basic-1280.png"); VerifyFrameFits(); VerifyButtonLabels(); VerifyLongestLabels(); });
             yield return new WaitForSecondsRealtime(.5f);
             Cleanup();
         }
@@ -132,7 +138,9 @@ namespace KingdomGlobalLedger.Verification
             var mana = panel.VisibleRows.Single(row => row.Key == "basic/currency/4");
             Check(mana.Income == 125000 && mana.Outflow == 25000 && mana.Amount == 100000, "Basic currencies retain earned, spent and net totals");
             var rowRoot = panel.Scroller.content.Cast<Transform>().Single(child => child.name == mana.Key);
-            Check(rowRoot.Find("In/Amount").GetComponent<TMP_Text>().text == "125,000", "Mana uses thousands separators in the actual rendered row");
+            Check(rowRoot.Find("Net/Amount").GetComponent<TMP_Text>().text.Contains("100,000.00"), "Basic net uses grouped digits and fixed decimals");
+            Check(!rowRoot.Find("In") && !rowRoot.Find("Out"), "Fresh Basic rows allocate only the net cell");
+            Check(panel.ControlsCollapsed && panel.Frame.Find("Search").gameObject.activeInHierarchy, "Search remains visible with Settings initially closed");
             Check(rowRoot.Find("NameViewport/Name").GetComponent<TMP_Text>().font == nativeFont, "V1 retains the native pixel font");
             Check(panel.Frame.GetComponent<Image>().sprite?.name == "DefaultBorderDark", "V1 retains the native pixel frame");
             VerifyColumns();
@@ -168,7 +176,7 @@ namespace KingdomGlobalLedger.Verification
         void VerifyAdvanced()
         {
             panel.SetViewMode(LedgerPanel.ViewMode.Adv);
-            panel.SelectTab(1);
+            panel.SelectTab(2);
             panel.ToggleRow("item/iron_ore");
             var container = panel.VisibleRows.Single(row => row.Depth == 1 && row.Item?.Identifier == "iron_ore");
             Check(container.Income == 100 && container.Outflow == 100 && container.Amount == 0, "Collapsed balanced containers expose production and consumption");
@@ -185,20 +193,21 @@ namespace KingdomGlobalLedger.Verification
         void VerifyControls()
         {
             panel.SetViewMode(LedgerPanel.ViewMode.Basic);
-            int[][] windows = { new[] { 1, 10, 30 }, new[] { 60, 300, 600 }, new[] { 3600, 43200, 86400 } };
+            panel.SelectTab(0);
+            int[][] windows = { new[] { 1, 10, 30 }, new[] { 60, 300, 1800 }, new[] { 3600, 43200, 86400 } };
             for (int unit = 0; unit < windows.Length; unit++)
             {
                 panel.SetTimeUnit((LedgerPanel.TimeUnit)unit);
-                for (int option = 0; option < windows[unit].Length; option++)
+                for (int option = 0; option < 3; option++)
                 {
                     panel.SetWindow(option);
-                    Check(panel.WindowSeconds == windows[unit][option], "Observation window " + windows[unit][option] + " seconds");
+                    Check(panel.WindowSeconds == windows[unit][option], "Selected grouped observation window " + windows[unit][option]);
                 }
             }
             Check(Math.Abs(panel.Rate(24) - 1) < .0001, "24-hour totals normalize correctly to an hourly rate");
             panel.SetTimeUnit(LedgerPanel.TimeUnit.Min);
             panel.SetWindow(2);
-            Check(Math.Abs(panel.Rate(100) - 10) < .0001, "10-minute totals normalize correctly to a per-minute rate");
+            Check(Math.Abs(panel.Rate(300) - 10) < .0001, "30-minute totals normalize correctly to a per-minute rate");
             panel.SetWindow(0);
             panel.ToggleFreeze();
             long before = panel.VisibleRows.Single(row => row.Key == "basic/currency/4").Income;
@@ -207,11 +216,30 @@ namespace KingdomGlobalLedger.Verification
             Check(panel.VisibleRows.Single(row => row.Key == "basic/currency/4").Income == before, "Freeze retains the displayed snapshot while recording continues");
             panel.ToggleFreeze();
             Check(panel.VisibleRows.Single(row => row.Key == "basic/currency/4").Income == before + 20, "Resume refreshes the current accounting snapshot");
-            panel.SetRefresh(10);
-            panel.SetSort(3);
-            panel.SetDescending(true);
-            var items = panel.VisibleRows.Where(row => row.Item != null).ToArray();
-            Check(items.First().Item.Identifier == "iron_ore", "Numeric consumption sorting puts the largest item consumer first");
+            panel.SetRefresh(4);
+            var beforeOrder = panel.VisibleRows.Select(row => row.Key).ToArray();
+            panel.SetSort(4);
+            var netHeading = panel.Frame.Find("NetHeading").GetComponentInChildren<TMP_Text>();
+            Check(netHeading.text.EndsWith(" v", StringComparison.Ordinal), "Basic NET heading shows descending indicator");
+            var sortedCurrencies = panel.VisibleRows.Where(row => row.GameCurrency.HasValue).Select(row => row.Key).ToArray();
+            Check(sortedCurrencies.SequenceEqual(new[]
+            {
+                "basic/currency/" + (int)GameCurrency.Mana,
+                "basic/currency/" + (int)GameCurrency.Gold,
+                "basic/currency/" + (int)GameCurrency.Requisition
+            }), "Basic NET descending sorts currencies from highest to lowest net");
+            panel.SetSort(4);
+            Check(netHeading.text.EndsWith(" ^", StringComparison.Ordinal), "Second Basic NET click reverses to ascending");
+            var ascCurrencies = panel.VisibleRows.Where(row => row.GameCurrency.HasValue).Select(row => row.Key).ToArray();
+            Check(ascCurrencies.SequenceEqual(new[]
+            {
+                "basic/currency/" + (int)GameCurrency.Requisition,
+                "basic/currency/" + (int)GameCurrency.Gold,
+                "basic/currency/" + (int)GameCurrency.Mana
+            }), "Basic NET ascending sorts currencies from lowest to highest net");
+            panel.SetSort(0);
+            Check(panel.VisibleRows.Select(row => row.Key).SequenceEqual(beforeOrder), "RESOURCE heading resets Basic order");
+            if (panel.ControlsCollapsed) panel.ToggleControls();
             float oldHeight = panel.Frame.rect.height;
             panel.ToggleControls();
             Check(!panel.Frame.Find("Controls").gameObject.activeSelf && panel.Frame.rect.height < oldHeight, "Controls collapse and shrink the native panel");
@@ -281,7 +309,7 @@ namespace KingdomGlobalLedger.Verification
                 foreach (string name in new[] { "In", "Out", "Net" })
                 {
                     var cell = (RectTransform)child.Find(name);
-                    if (!cell.gameObject.activeSelf) continue;
+                    if (!cell || !cell.gameObject.activeSelf) continue;
                     Check(cell.anchoredPosition.x + cell.rect.width <= LedgerPanel.ViewX, "Rate cell stays before the View button: " + name);
                 }
             }
@@ -296,6 +324,52 @@ namespace KingdomGlobalLedger.Verification
             var corners = new Vector3[4];
             panel.Frame.GetWorldCorners(corners);
             Check(corners.All(point => point.x >= -1 && point.y >= -1 && point.x <= Screen.width + 1 && point.y <= Screen.height + 1), "Native panel fits " + Screen.width + "x" + Screen.height);
+        }
+
+        void VerifyButtonLabels()
+        {
+            Canvas.ForceUpdateCanvases();
+            var clipped = new System.Collections.Generic.List<string>();
+            foreach (var button in panel.Frame.GetComponentsInChildren<Button>())
+            {
+                var label = button.GetComponentInChildren<TMP_Text>();
+                if (!label) continue;
+                label.ForceMeshUpdate();
+                if (label.isTextTruncated) clipped.Add(button.name + ": " + label.text);
+            }
+            Check(clipped.Count == 0, "All button labels fit at " + Screen.width + ": " + string.Join(", ", clipped));
+        }
+
+        void VerifyLongestLabels()
+        {
+            var plugin = GlobalLedgerPlugin.Instance;
+            bool rolling = plugin.EnableRollingAverage.Value;
+            int samples = plugin.RollingAverageEntries.Value;
+            var mode = panel.Mode;
+            var unit = panel.Unit;
+            int tab = panel.SelectedTab;
+            bool collapsed = panel.ControlsCollapsed;
+            try
+            {
+                plugin.EnableRollingAverage.Value = true;
+                plugin.RollingAverageEntries.Value = 30;
+                panel.SetViewMode(LedgerPanel.ViewMode.Adv);
+                panel.SelectTab(1);
+                panel.SetTimeUnit(LedgerPanel.TimeUnit.Hour);
+                if (panel.ControlsCollapsed) panel.ToggleControls();
+                panel.SetSort(4);
+                VerifyButtonLabels();
+            }
+            finally
+            {
+                plugin.EnableRollingAverage.Value = rolling;
+                plugin.RollingAverageEntries.Value = samples;
+                panel.SetSort(0);
+                panel.SetViewMode(mode);
+                panel.SelectTab(tab);
+                panel.SetTimeUnit(unit);
+                if (panel.ControlsCollapsed != collapsed) panel.ToggleControls();
+            }
         }
 
         void Capture(string name)

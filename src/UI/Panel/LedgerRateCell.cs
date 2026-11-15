@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using KingdomFoundation.Api;
 using TMPro;
 using UnityEngine;
@@ -9,79 +8,66 @@ namespace KingdomGlobalLedger
 {
     internal sealed class LedgerRateCell
     {
-        readonly RectTransform root, coins;
+        readonly RectTransform root;
         readonly TMP_Text amount;
-        readonly TMP_Text[] coinText = new TMP_Text[3];
-        readonly Image[] coinIcon = new Image[3];
+        readonly TMP_Text denomination;
+        readonly Image coin;
+        readonly string numericSpacing;
 
         internal LedgerRateCell(LedgerUi ui, Transform parent, string name)
         {
             root = LedgerUi.Rect(parent, name);
-            root.gameObject.AddComponent<RectMask2D>();
             amount = ui.Text(root, "Amount", "", 17);
             amount.alignment = TextAlignmentOptions.MidlineRight;
             amount.enableAutoSizing = true;
             amount.fontSizeMin = 12;
             amount.fontSizeMax = 17;
-            coins = LedgerUi.Rect(root, "Coins");
-            for (int i = 0; i < coinText.Length; i++)
-            {
-                coinText[i] = ui.Text(coins, "Amount" + i, "", 17);
-                coinText[i].alignment = TextAlignmentOptions.MidlineRight;
-                coinIcon[i] = LedgerUi.Rect(coins, "Coin" + i).gameObject.AddComponent<Image>();
-                coinIcon[i].preserveAspect = true;
-                coinIcon[i].raycastTarget = false;
-            }
+            amount.richText = true;
+            float advance = 0;
+            foreach (char digit in "0123456789,+-.")
+                advance = Mathf.Max(advance, amount.GetPreferredValues(digit.ToString()).x / amount.fontSize);
+            numericSpacing = "<mspace=" + advance.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "em>";
+            LedgerUi.Fill(amount.rectTransform, 0, 0, 4, 0);
+            coin = LedgerUi.Rect(root, "Coin").gameObject.AddComponent<Image>();
+            coin.preserveAspect = true;
+            coin.raycastTarget = false;
+            denomination = ui.Text(root, "Denomination", "", 14);
         }
+
+        internal void Hide() => root.gameObject.SetActive(false);
 
         internal void Bind(LedgerRowData row, long value, bool net, LedgerPanel owner, float x)
         {
             bool visible = !row.IsHeader && (row.GameCurrency.HasValue || row.Item != null);
             root.gameObject.SetActive(visible);
             if (!visible) return;
-            LedgerUi.Place(root, x, 0, LedgerPanel.CellWidth, LedgerPanel.RowHeight - 1);
-            Color color = net ? value > 0 ? LedgerUi.Gain : value < 0 ? LedgerUi.Loss : LedgerUi.Muted : LedgerUi.Paper;
+            float width = owner.Mode == LedgerPanel.ViewMode.Basic ? LedgerPanel.NetX + LedgerPanel.CellWidth - LedgerPanel.IncomeX : LedgerPanel.CellWidth;
+            if (owner.Mode == LedgerPanel.ViewMode.Basic) x = LedgerPanel.IncomeX;
+            LedgerUi.Place(root, x, 0, width, LedgerPanel.RowHeight - 1);
+            amount.color = net ? value > 0 ? LedgerUi.Gain : value < 0 ? LedgerUi.Loss : LedgerUi.Muted : LedgerUi.Paper;
+            double rate = owner.Rate(value);
+            string unit = "";
             bool gold = row.GameCurrency == GameCurrency.Gold;
-            coins.gameObject.SetActive(gold);
-            amount.gameObject.SetActive(!gold);
-            if (gold) BindGold((long)Math.Round(owner.Rate(value)), net, color);
-            else
+            coin.gameObject.SetActive(gold);
+            denomination.gameObject.SetActive(gold);
+            if (gold)
             {
-                amount.text = LedgerUi.FormatAmount(owner.Rate(value), net);
-                amount.color = color;
-                LedgerUi.Fill(amount.rectTransform, 0, 0, 4, 0);
+                double magnitude = Math.Abs(rate);
+                double divisor = magnitude >= 10000 ? 10000 : magnitude >= 100 ? 100 : 1;
+                unit = divisor == 10000 ? "g" : divisor == 100 ? "s" : "c";
+                coin.sprite = divisor == 10000 ? LedgerUi.GoldCoin() : divisor == 100 ? LedgerUi.SilverCoin() : LedgerUi.CopperCoin();
+                rate /= divisor;
             }
-        }
-
-        void BindGold(long scaled, bool net, Color color)
-        {
-            var parts = LedgerUi.SplitGoldCompact(scaled);
-            long[] values = { parts.Gold, parts.Silver, parts.Copper };
-            Sprite[] sprites = { LedgerUi.GoldCoin(), LedgerUi.SilverCoin(), LedgerUi.CopperCoin() };
-            bool[] shown = { parts.Gold != 0, parts.Silver != 0 || parts.Gold != 0, parts.Gold == 0 };
-            int first = shown[0] ? 0 : shown[1] ? 1 : 2;
-            float total = 0;
-            for (int i = 0; i < coinText.Length; i++)
+            // Use the font's own widest numeric advance: forcing a narrower cell
+            // makes this pixel face overlap even though TMP reports no truncation.
+            amount.text = numericSpacing + LedgerUi.FormatAmount(rate, net) + "</mspace>";
+            LedgerUi.Fill(amount.rectTransform, 0, 0, gold ? 40 : 4, 0);
+            if (gold)
             {
-                coinText[i].gameObject.SetActive(shown[i]);
-                coinIcon[i].gameObject.SetActive(shown[i]);
-                if (!shown[i]) continue;
-                coinText[i].text = (i == first ? scaled < 0 ? "-" : net && scaled > 0 ? "+" : "" : "") + values[i].ToString("#,0", CultureInfo.InvariantCulture);
-                coinText[i].color = color;
-                coinIcon[i].sprite = sprites[i];
-                total += coinText[i].GetPreferredValues().x + 24;
-            }
-            float scale = Mathf.Min(1, (LedgerPanel.CellWidth - 4) / Mathf.Max(1, total));
-            LedgerUi.Place(coins, LedgerPanel.CellWidth - 4 - total * scale, (LedgerPanel.RowHeight - 1) * .5f * (1 - scale), total, LedgerPanel.RowHeight - 1);
-            coins.localScale = Vector3.one * scale;
-            float cursor = 0;
-            for (int i = 0; i < coinText.Length; i++)
-            {
-                if (!shown[i]) continue;
-                float width = coinText[i].GetPreferredValues().x;
-                LedgerUi.Place(coinText[i].rectTransform, cursor, 0, width, LedgerPanel.RowHeight - 1);
-                LedgerUi.Place(coinIcon[i].rectTransform, cursor + width + 2, 10, 16, 16);
-                cursor += width + 24;
+                LedgerUi.Place(coin.rectTransform, width - 36, 9, 18, 18);
+                LedgerUi.Place(denomination.rectTransform, width - 16, 0, 14, LedgerPanel.RowHeight - 1);
+                denomination.text = unit;
+                denomination.color = amount.color;
             }
         }
     }

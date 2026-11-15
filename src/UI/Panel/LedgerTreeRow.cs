@@ -16,13 +16,16 @@ namespace KingdomGlobalLedger
         readonly LedgerNameScroll nameScroll;
         readonly Image icon, prefixIcon, shade;
         readonly LedgerRowHover hover;
-        readonly LedgerRateCell income, outflow, net;
+        LedgerRateCell income, outflow;
+        readonly LedgerRateCell net;
+        readonly LedgerUi ui;
         readonly int index;
         LedgerRowData data;
 
         internal LedgerTreeRow(LedgerPanel owner, LedgerUi ui, Transform parent, int index)
         {
             this.owner = owner;
+            this.ui = ui;
             this.index = index;
             Root = LedgerUi.Rect(parent, "TreeRow" + index);
             shade = ui.Background(Root, Color.clear);
@@ -47,8 +50,6 @@ namespace KingdomGlobalLedger
             label = ui.Text(nameViewport, "Name", "", 18);
             nameScroll = nameViewport.gameObject.AddComponent<LedgerNameScroll>();
             nameScroll.Initialize(label);
-            income = new LedgerRateCell(ui, Root, "In");
-            outflow = new LedgerRateCell(ui, Root, "Out");
             net = new LedgerRateCell(ui, Root, "Net");
             ViewButton = ui.Button(Root, "View", "View", () => { if (data?.Target != null) owner.View(data); }, 14);
         }
@@ -79,8 +80,14 @@ namespace KingdomGlobalLedger
             prefixIcon.enabled = value.PrefixIcon && !value.IsHeader;
             ViewButton.gameObject.SetActive(value.Target != null && !value.IsHeader);
             hover.Bind(value.Target);
-            income.Bind(value, value.Income, false, owner, LedgerPanel.IncomeX);
-            outflow.Bind(value, value.Outflow, false, owner, LedgerPanel.OutflowX);
+            if (owner.Mode == LedgerPanel.ViewMode.Adv)
+            {
+                if (income == null) income = new LedgerRateCell(ui, Root, "In");
+                if (outflow == null) outflow = new LedgerRateCell(ui, Root, "Out");
+                income.Bind(value, value.Income, false, owner, LedgerPanel.IncomeX);
+                outflow.Bind(value, value.Outflow, false, owner, LedgerPanel.OutflowX);
+            }
+            else { income?.Hide(); outflow?.Hide(); }
             net.Bind(value, value.Amount, true, owner, LedgerPanel.NetX);
             Layout(width);
         }
@@ -91,7 +98,8 @@ namespace KingdomGlobalLedger
             LedgerUi.Place(Root, 0, data.Top, width, LedgerPanel.RowHeight - 1);
             if (data.IsHeader)
             {
-                LedgerUi.Place(nameViewport, 16, 0, width - 32, LedgerPanel.RowHeight - 1);
+                LedgerUi.Place(arrow.rectTransform, 8, 0, 20, LedgerPanel.RowHeight - 1);
+                LedgerUi.Place(nameViewport, 32, 0, width - 48, LedgerPanel.RowHeight - 1);
                 nameScroll.Layout();
                 return;
             }
@@ -103,7 +111,7 @@ namespace KingdomGlobalLedger
             float textX = iconX + (icon.enabled ? 28 : 0);
             LedgerUi.Place(nameViewport, textX, 0, Mathf.Max(30, LedgerPanel.IncomeX - textX - 8), 35);
             nameScroll.Layout();
-            LedgerUi.Place((RectTransform)ViewButton.transform, LedgerPanel.ViewX, 4, 42, 27);
+            LedgerUi.Place((RectTransform)ViewButton.transform, LedgerPanel.ViewX, 4, 60, 27);
         }
     }
 }

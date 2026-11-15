@@ -48,6 +48,7 @@ namespace KingdomGlobalLedger
             });
             var label = Text(rect, "Label", value, fontSize);
             label.alignment = TextAlignmentOptions.Center;
+            label.margin = new Vector4(6, 0, 6, 0);
             return button;
         }
 
@@ -66,7 +67,7 @@ namespace KingdomGlobalLedger
             Fill(viewport, 10, 0, 10, 0);
             viewport.gameObject.AddComponent<RectMask2D>();
             var text = Text(viewport, "Text", "", 17);
-            var placeholder = Text(viewport, "Placeholder", "Search resources, containers or buildings...", 17);
+            var placeholder = Text(viewport, "Placeholder", "Search resources or sources...", 17);
             placeholder.color = Muted;
             var input = rect.gameObject.AddComponent<TMP_InputField>();
             input.targetGraphic = background;
@@ -75,6 +76,7 @@ namespace KingdomGlobalLedger
             input.placeholder = placeholder;
             input.lineType = TMP_InputField.LineType.SingleLine;
             input.richText = false;
+            rect.gameObject.AddComponent<LedgerSearchFocus>().Initialize(input);
             input.onValueChanged.AddListener(value => changed(value));
             return input;
         }
@@ -82,7 +84,8 @@ namespace KingdomGlobalLedger
         internal static string FormatAmount(double value, bool signed = false)
         {
             double rounded = Math.Round(value, 2, MidpointRounding.AwayFromZero);
-            return (signed && rounded > 0 ? "+" : "") + rounded.ToString("#,0.##", CultureInfo.InvariantCulture);
+            if (rounded == 0) rounded = 0;
+            return (signed && rounded > 0 ? "+" : "") + rounded.ToString("#,0.00", CultureInfo.InvariantCulture);
         }
 
         internal static (string Sign, long Gold, long Silver, long Copper) SplitGoldCompact(long value)
@@ -163,16 +166,19 @@ namespace KingdomGlobalLedger
         {
             if (item == null)
                 return int.MaxValue;
+            if (tierBoundaries == null)
+                tierBoundaries = TierFirstItems.Select(id => FoundationApi.ItemAccess.Find(id)?.Ordinal ?? int.MaxValue).ToArray();
             int tier = 1;
             for (int i = 1; i < TierFirstItems.Length; i++)
             {
-                var boundary = FoundationApi.ItemAccess.Items.FirstOrDefault(t => t.Identifier == TierFirstItems[i]);
-                if (boundary != null && item.Ordinal >= boundary.Ordinal)
+                if (item.Ordinal >= tierBoundaries[i])
                     tier = i + 1;
             }
 
             return tier;
         }
+
+        static int[] tierBoundaries;
 
         internal static IEnumerable<GameItemType> OrderedUnlockedItems()
         {

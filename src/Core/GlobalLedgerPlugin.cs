@@ -41,7 +41,7 @@ namespace KingdomGlobalLedger
             }
         }
 
-        public const string Id = "urakka.kingdominc.globalledger", Version = "0.1.13";
+        public const string Id = "urakka.kingdominc.globalledger", Version = "0.1.15";
         internal static GlobalLedgerPlugin Instance;
         internal readonly LedgerBook Book = new LedgerBook(() => Time.realtimeSinceStartupAsDouble);
         internal readonly LedgerLocations Locations = new LedgerLocations();
@@ -92,9 +92,9 @@ namespace KingdomGlobalLedger
         {
             var section = Context.Settings("Global Ledger", "Tracks live currency earnings, operating expenses, and item production across your entire kingdom.");
             section.ClearElements();
-            section.AddToggle(EnableRollingAverage, "Rolling average");
-            section.AddText("Smooth rates over recent refresh samples. Choose the observation window in the ledger; longer windows help with dungeon rewards.");
-            section.AddSlider(RollingAverageEntries, 2, 30, "Entry Count");
+            section.AddToggle(EnableRollingAverage, "Smoothing");
+            section.AddText("Rates already average activity over the selected window. Smoothing blends additional display refreshes; it does not change that window.");
+            section.AddSlider(RollingAverageEntries, 2, 30, "Refresh samples");
         }
 
         void Update() => EnsurePlayer();

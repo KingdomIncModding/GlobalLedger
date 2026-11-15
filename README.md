@@ -1,6 +1,6 @@
 # Global Ledger
 
-**Global Ledger 0.1.13 — for Kingdom Inc game version 1.0.14.**
+**Global Ledger 0.1.15 — for Kingdom Inc game version 1.0.14.**
 
 [GitHub releases](https://github.com/KingdomIncModding/GlobalLedger/releases) · [Nexus Mods](https://www.nexusmods.com/kingdominc/mods/19)
 
@@ -12,19 +12,20 @@ Monitor economy flow in real time without placing physical tracking nodes in eve
 
 - **Top Mod Bar Dropdown:** Access real-time financial and production data from the top Mod Bar at any time.
 - **Basic and Advanced Modes:**
-  - **Basic Mode:** Scrollable currency and item overview with separate In, Out and Net columns.
+  - **Basic Mode:** Lightweight currency and item overview showing net rates only.
   - **Advanced Mode:** Full hierarchical drill-down by Currency / Item > Container > Building > Operating Costs.
 - **Original Pixel Look:** Native pixel font, frames, buttons, resource icons and coin artwork.
-- **Observation Windows:** Choose 1s / 10s / 30s, 1m / 5m / 10m, or 1h / 12h / 24h. Rates follow the selected unit and window.
-- **Separate In / Out / Net:** See production and consumption even when a container balances to zero.
-- **Search and Sorting:** Find resources, containers and buildings, including sources under collapsed parents. Sort within each section or hierarchy level by name, tier, income, outflow or net. Click a numeric heading to sort it; click again to reverse the order.
-- **Refresh and Freeze:** Cycle the refresh interval from 1 to 10 seconds. Freeze the display while activity continues to be recorded, then Resume to update it.
-- **Configurable Rolling Averages:** Smooth displayed rates over 2–30 refresh samples. The observation window stays independent of smoothing.
-- **Collapsible Controls:** Hide the controls to make the window smaller without losing the selected settings.
-- **Multi-Currency Accounting:** Gold, Silver, and Copper use native denominations; Requisition, Mana, Crowns, Medals, and Rings maintain their own units.
+- **Independent Rate Units and History:** Switch between `Sec`, `Min`, and `Hr` rate units without losing each unit's selected observation window (`1s / 10s / 30s`, `1m / 5m / 30m`, `1h / 12h / 24h`) inside Settings.
+- **Advanced In / Out / Net:** See production and consumption even when a container balances to zero.
+- **Search, Tabs, and Collapsible Categories:** Search resources, containers and buildings, including entries under collapsed categories or parents. Filter with the **All**, **Currencies**, and **Production** tabs, or collapse and expand the **CURRENCIES** and **PRODUCTION** category headers directly. Game hotkeys pause while typing in search.
+- **Column Sorting & Stable Advanced Lists:** Click **NET** in Basic mode or **IN**, **OUT**, and **NET** in Advanced mode to sort resources within each category (and sources beneath expanded entries) descending, click again to reverse, and click a third time or click **RESOURCE** to reset to the default order. While open in Advanced mode, visible items, expanded sources, and the current row order stay pinned instead of disappearing or jumping between auto-refreshes.
+- **Refresh and Freeze:** Rates refresh every 2 seconds by default; Settings lets you cycle `1` to `4` seconds. **Freeze** the display while activity continues to be recorded, then **Unfreeze** to update it.
+- **Optional Smoothing:** All rates already average activity over the observation window. Smoothing optionally blends recent display refresh samples without changing the observation window. Cycle `OFF` or `2`–`5` samples via **Smooth** in Settings, or choose `2`–`30` samples in the mod settings.
+- **Compact Settings:** Settings starts closed (`Show Settings` / `Hide Settings`). Search, **All / Currencies / Production** tabs, and **Collapse All** (in Advanced mode) remain visible above the table.
+- **Multi-Currency Accounting:** Gold rates retain native denomination icons alongside explicit g / s / c labels; Requisition, Mana, Crowns, Medals, and Rings maintain their own units.
 - **Container & Workspace Grouping:** Automatically groups production by blueprint containers and workspaces, with container icon stickers and clean names.
 - **Live View Navigation:** Click the View button on any container or building row to switch workspaces, pan the camera, and highlight the building.
-- **Readable Values:** Thousands separators for large amounts, compact native coin denominations and scrolling long names after a two-second hover.
+- **Readable Values:** Equal-width numeric characters use the native font's natural spacing, with thousands separators and two decimal places. Basic has a wide value column; Advanced has wider numeric columns. Gold uses native coin icons with explicit g (gold), s (silver) or c (copper) labels. Long names scroll after a two-second hover.
 - **Right Click Fix Integration:** With Right Click Fix active, a short right-click closes the ledger. Escape, Close and the Mod Bar button also dismiss it.
 
 ## How the Accounting Works
@@ -35,7 +36,7 @@ Rates reflect actual production and financial activity over the selected observa
 - Container collection tray changes are combined with wallet credits so income is recognized when earned without double-counting.
 - Pure routing nodes and storage pass-throughs are excluded to ensure true net production measurements.
 - In and Out show observed production/earnings and consumption/spending, not portal transfers or estimated demand.
-- Coin display uses the largest two denominations. For example, 1 gold, 3 silver and 98 copper displays as 1 gold and 4 silver; recorded accounting totals remain exact.
+- Gold rates use the largest applicable denomination with two decimal places: for example, 10,398 copper displays as 1.04g. The table legend explains g / s / c; denomination does not depend on icon color. Recorded accounting totals remain exact.
 
 ## Requirements
 

@@ -14,7 +14,7 @@ namespace KingdomGlobalLedger
     {
         internal void Activate(LedgerRowData row)
         {
-            if (row.IsHeader) return;
+            if (row.IsHeader) { ToggleCategory(row.Key); return; }
             selectedKey = row.Key;
             if (row.Expandable) ToggleRow(row.Key);
             else RefreshNow();
@@ -54,11 +54,22 @@ namespace KingdomGlobalLedger
 
         void BuildBasic()
         {
-            if (FoundationApi.Kingdom == null)
-                return;
-            var currentTotals = snapshot;
-            // Section 1: CURRENCIES
-            VisibleRows.Add(new LedgerRowData("basic/header/currencies", "CURRENCIES", 0) { IsHeader = true });
+            if (FoundationApi.Kingdom == null) return;
+            if (tab != 2 && AddCategory("currencies", "CURRENCIES", 0)) BuildBasicCurrencies();
+            if (tab != 1 && AddCategory("production", "PRODUCTION", 0)) BuildBasicProduction();
+        }
+
+        bool AddCategory(string id, string label, int depth)
+        {
+            string key = "category/" + id;
+            bool open = !collapsedCategories.Contains(key);
+            VisibleRows.Add(new LedgerRowData(key, label, depth) { IsHeader = true, Expandable = true, Open = open });
+            return open;
+        }
+
+        void BuildBasicCurrencies()
+        {
+            var totals = snapshotIndex.Totals;
             int currencyCount = 0;
             foreach (GameCurrency currency in Enum.GetValues(typeof(GameCurrency)))
             {
@@ -66,7 +77,7 @@ namespace KingdomGlobalLedger
                     continue;
                 int c = (int)currency;
                 bool hasActivity = book.HasCurrencyActivity(c);
-                bool isActiveInWindow = currentTotals.Any(t => t.Active(c));
+                bool isActiveInWindow = totals.Active(c);
                 double timeSinceActivity = book.TimeSinceCurrencyActivity(c);
                 if (!showAll)
                 {
@@ -76,13 +87,13 @@ namespace KingdomGlobalLedger
                         continue;
                 }
 
-                long net = currentTotals.Where(t => t.Active(c)).Sum(t => t.Net(c));
+                long net = totals.Net(c);
                 var row = new LedgerRowData("basic/currency/" + c, LedgerUi.CurrencyName(currency), 1)
                 {
                     GameCurrency = currency,
                     Amount = net,
-                    Income = currentTotals.Sum(t => t.Earned[c]),
-                    Outflow = currentTotals.Sum(t => t.Spent[c]),
+                    Income = totals.Earned[c],
+                    Outflow = totals.Spent[c],
                     Expandable = false,
                     Icon = currency.GetIcon()
                 };
@@ -92,18 +103,20 @@ namespace KingdomGlobalLedger
 
             if (currencyCount == 0 && !showAll)
             {
-                VisibleRows.Add(new LedgerRowData("basic/currency/empty", "No observed currency activity in the recent window. Click Show All to list unlocked currencies.", 1));
+                VisibleRows.Add(new LedgerRowData("basic/currency/empty", "No observed currency activity in the recent window. Try a longer observation window.", 1));
             }
+        }
 
-            // Section 2: PRODUCTION
-            VisibleRows.Add(new LedgerRowData("basic/header/production", "ITEM PRODUCTION", 0) { IsHeader = true });
-            var items = LedgerUi.OrderedUnlockedItems();
+        void BuildBasicProduction()
+        {
+            var totals = snapshotIndex.Totals;
+            var items = unlockedItems;
             int count = 0;
             foreach (var item in items)
             {
                 string id = item.Identifier;
                 bool hasActivity = book.HasItemActivity(id);
-                bool isActiveInWindow = currentTotals.Any(t => t.ItemActive(id));
+                bool isActiveInWindow = totals.ItemActive(id);
                 double timeSinceActivity = book.TimeSinceItemActivity(id);
                 if (!showAll)
                 {
@@ -118,13 +131,13 @@ namespace KingdomGlobalLedger
                         continue;
                 }
 
-                long net = currentTotals.Where(t => t.ItemActive(id)).Sum(t => t.ItemNet(id));
+                long net = totals.ItemNet(id);
                 var row = new LedgerRowData("basic/item/" + id, LedgerUi.ItemName(item), 1)
                 {
                     Item = item,
                     Amount = net,
-                    Income = currentTotals.Sum(t => t.ItemProduced(id)),
-                    Outflow = currentTotals.Sum(t => t.ItemConsumed(id)),
+                    Income = totals.ItemProduced(id),
+                    Outflow = totals.ItemConsumed(id),
                     Expandable = false,
                     Icon = item.GetIcon()
                 };
@@ -134,7 +147,7 @@ namespace KingdomGlobalLedger
 
             if (count == 0 && !showAll)
             {
-                VisibleRows.Add(new LedgerRowData("basic/item/empty", "No observed production in the recent window. Click Show All to list unlocked items.", 1));
+                VisibleRows.Add(new LedgerRowData("basic/item/empty", "No observed production in the recent window. Try a longer observation window.", 1));
             }
         }
 
@@ -142,7 +155,6 @@ namespace KingdomGlobalLedger
         {
             if (FoundationApi.Kingdom == null)
                 return;
-            var data = locations.Resolve(snapshot);
             foreach (GameCurrency currency in Enum.GetValues(typeof(GameCurrency)))
             {
                 if (!currency.IsUnlocked())
@@ -150,17 +162,18 @@ namespace KingdomGlobalLedger
                 int c = (int)currency;
                 if (!showAll && !book.HasCurrencyActivity(c) && currency != GameCurrency.Gold) continue;
                 string root = "currency/" + c;
-                var active = data.Where(t => t.Totals.Active(c)).ToArray();
-                Add(root, LedgerUi.CurrencyName(currency), 0, currency, active.Sum(t => t.Totals.Net(c)), true, active.Sum(t => t.Totals.Earned[c]), active.Sum(t => t.Totals.Spent[c]));
+                var active = snapshot.Where(t => t.Active(c)).ToArray();
+                Add(root, LedgerUi.CurrencyName(currency), 0, currency, active.Sum(t => t.Net(c)), true, active.Sum(t => t.Earned[c]), active.Sum(t => t.Spent[c]));
                 if (!expanded.Contains(root) && string.IsNullOrEmpty(search))
                     continue;
                 if (active.Length == 0)
                 {
-                    VisibleRows.Add(new LedgerRowData(root + "/empty", "No observed activity in the recent window.", 1));
+                    if (!EmitMissingAdvChildren(root))
+                        VisibleRows.Add(new LedgerRowData(root + "/empty", "No observed activity in the recent window.", 1));
                     continue;
                 }
 
-                foreach (var group in active.GroupBy(t => t.GroupKey).OrderBy(g => g.First().GroupName, StringComparer.CurrentCulture).ThenBy(g => g.Key, StringComparer.Ordinal))
+                foreach (var group in locations.Resolve(active).GroupBy(t => t.GroupKey).OrderBy(g => g.First().GroupName, StringComparer.CurrentCulture).ThenBy(g => g.Key, StringComparer.Ordinal))
                 {
                     string groupKey = root + "/" + group.Key;
                     var container = group.First();
@@ -168,6 +181,7 @@ namespace KingdomGlobalLedger
                     containerRow.PrefixIcon = container.GroupTarget != null ? LedgerLocations.ContainerIcon() : null;
                     containerRow.Icon = container.GroupIcon;
                     containerRow.Target = container.GroupTarget;
+                    RememberAdvChild(root, containerRow);
                     if (!expanded.Contains(groupKey) && string.IsNullOrEmpty(search))
                         continue;
                     foreach (var entry in group.OrderBy(t => t.BuildingName, StringComparer.CurrentCulture).ThenBy(t => t.Totals.Source.Id, StringComparer.Ordinal))
@@ -177,10 +191,13 @@ namespace KingdomGlobalLedger
                         var buildingRow = Add(buildingKey, entry.BuildingName, 2, currency, building.Net(c), true, building.Earned[c], building.Spent[c]);
                         buildingRow.Icon = entry.BuildingIcon;
                         buildingRow.Target = entry.BuildingTarget;
+                        RememberAdvChild(groupKey, buildingRow);
                         if (!expanded.Contains(buildingKey) && string.IsNullOrEmpty(search))
                             continue;
                         string costs = buildingKey + "/costs";
-                        VisibleRows.Add(new LedgerRowData(costs, "Operating Costs", 3) { Expandable = true, Open = expanded.Contains(costs) });
+                        var costsRow = new LedgerRowData(costs, "Operating Costs", 3) { Expandable = true, Open = expanded.Contains(costs) };
+                        VisibleRows.Add(costsRow);
+                        RememberAdvChild(buildingKey, costsRow);
                         if (!expanded.Contains(costs) && string.IsNullOrEmpty(search))
                             continue;
                         bool any = false;
@@ -190,13 +207,16 @@ namespace KingdomGlobalLedger
                                 var cost = Add(costs + "/" + (int)costCurrency, LedgerUi.CurrencyName(costCurrency), 4, costCurrency, -building.Spent[(int)costCurrency], false, 0, building.Spent[(int)costCurrency]);
                                 cost.Icon = costCurrency.GetIcon();
                                 cost.IconOnly = true;
+                                RememberAdvChild(costs, cost);
                                 any = true;
                             }
 
-                        if (!any)
+                        if (!EmitMissingAdvChildren(costs) && !any)
                             VisibleRows.Add(new LedgerRowData(costs + "/empty", "No observed operating costs", 4));
                     }
+                    EmitMissingAdvChildren(groupKey);
                 }
+                EmitMissingAdvChildren(root);
             }
         }
 
@@ -204,24 +224,27 @@ namespace KingdomGlobalLedger
         {
             if (FoundationApi.Kingdom == null)
                 return;
-            var data = locations.Resolve(snapshot);
-            foreach (var item in LedgerUi.OrderedUnlockedItems())
+            int beforeCount = VisibleRows.Count;
+            foreach (var item in unlockedItems)
             {
                 string id = item.Identifier;
                 string root = "item/" + id;
-                var active = data.Where(t => t.Totals.ItemActive(id)).ToArray();
-                if (!showAll && active.Length == 0)
+                var active = snapshotIndex.Items.TryGetValue(id, out var itemSources) ? itemSources : new List<LedgerBookTotals>();
+                if (IsAdvOpen && active.Count != 0)
+                    advStability.PinItem(id);
+                if (!showAll && active.Count == 0 && !(IsAdvOpen && advStability.IsPinnedItem(id)))
                     continue;
-                AddItem(root, LedgerUi.ItemName(item), 0, item, active.Sum(t => t.Totals.ItemNet(id)), true, active.Sum(t => t.Totals.ItemProduced(id)), active.Sum(t => t.Totals.ItemConsumed(id)));
+                AddItem(root, LedgerUi.ItemName(item), 0, item, snapshotIndex.Totals.ItemNet(id), true, snapshotIndex.Totals.ItemProduced(id), snapshotIndex.Totals.ItemConsumed(id));
                 if (!expanded.Contains(root) && string.IsNullOrEmpty(search))
                     continue;
-                if (active.Length == 0)
+                if (active.Count == 0)
                 {
-                    VisibleRows.Add(new LedgerRowData(root + "/empty", "No observed activity in the recent window.", 1));
+                    if (!EmitMissingAdvChildren(root))
+                        VisibleRows.Add(new LedgerRowData(root + "/empty", "No observed activity in the recent window.", 1));
                     continue;
                 }
 
-                foreach (var group in active.GroupBy(t => t.GroupKey).OrderBy(g => g.First().GroupName, StringComparer.CurrentCulture).ThenBy(g => g.Key, StringComparer.Ordinal))
+                foreach (var group in locations.Resolve(active).GroupBy(t => t.GroupKey).OrderBy(g => g.First().GroupName, StringComparer.CurrentCulture).ThenBy(g => g.Key, StringComparer.Ordinal))
                 {
                     string groupKey = root + "/" + group.Key;
                     var container = group.First();
@@ -229,6 +252,7 @@ namespace KingdomGlobalLedger
                     containerRow.PrefixIcon = container.GroupTarget != null ? LedgerLocations.ContainerIcon() : null;
                     containerRow.Icon = container.GroupIcon;
                     containerRow.Target = container.GroupTarget;
+                    RememberAdvChild(root, containerRow);
                     if (!expanded.Contains(groupKey) && string.IsNullOrEmpty(search))
                         continue;
                     foreach (var entry in group.OrderBy(t => t.BuildingName, StringComparer.CurrentCulture).ThenBy(t => t.Totals.Source.Id, StringComparer.Ordinal))
@@ -238,21 +262,25 @@ namespace KingdomGlobalLedger
                         var buildingRow = AddItem(buildingKey, entry.BuildingName, 2, item, building.ItemNet(id), true, building.ItemProduced(id), building.ItemConsumed(id));
                         buildingRow.Icon = entry.BuildingIcon;
                         buildingRow.Target = entry.BuildingTarget;
+                        RememberAdvChild(groupKey, buildingRow);
                         if (!expanded.Contains(buildingKey) && string.IsNullOrEmpty(search))
                             continue;
                         string costs = buildingKey + "/costs";
-                        VisibleRows.Add(new LedgerRowData(costs, "Operating Costs", 3) { Expandable = true, Open = expanded.Contains(costs) });
+                        var costsRow = new LedgerRowData(costs, "Operating Costs", 3) { Expandable = true, Open = expanded.Contains(costs) };
+                        VisibleRows.Add(costsRow);
+                        RememberAdvChild(buildingKey, costsRow);
                         if (!expanded.Contains(costs) && string.IsNullOrEmpty(search))
                             continue;
                         bool any = false;
-                        foreach (var costItem in LedgerUi.OrderedUnlockedItems())
+                        foreach (var entryCost in building.ItemSpent)
                         {
-                            long spentItem = building.ItemConsumed(costItem.Identifier);
-                            if (spentItem != 0)
+                            long spentItem = entryCost.Value;
+                            if (spentItem != 0 && unlockedItemById.TryGetValue(entryCost.Key, out var costItem))
                             {
                                 var cost = AddItem(costs + "/item/" + costItem.Identifier, LedgerUi.ItemName(costItem), 4, costItem, -spentItem, false, 0, spentItem);
                                 cost.Icon = costItem.GetIcon();
                                 cost.IconOnly = true;
+                                RememberAdvChild(costs, cost);
                                 any = true;
                             }
                         }
@@ -263,22 +291,26 @@ namespace KingdomGlobalLedger
                                 var cost = Add(costs + "/currency/" + (int)costCurrency, LedgerUi.CurrencyName(costCurrency), 4, costCurrency, -building.Spent[(int)costCurrency], false, 0, building.Spent[(int)costCurrency]);
                                 cost.Icon = costCurrency.GetIcon();
                                 cost.IconOnly = true;
+                                RememberAdvChild(costs, cost);
                                 any = true;
                             }
 
-                        if (!any)
+                        if (!EmitMissingAdvChildren(costs) && !any)
                             VisibleRows.Add(new LedgerRowData(costs + "/empty", "No observed operating costs", 4));
                     }
+                    EmitMissingAdvChildren(groupKey);
                 }
+                EmitMissingAdvChildren(root);
             }
 
-            if (VisibleRows.Count == 0)
-                VisibleRows.Add(new LedgerRowData("production/empty", "No observed production in the selected window. Click Show All to list unlocked items.", 0));
+            if (VisibleRows.Count == beforeCount)
+                VisibleRows.Add(new LedgerRowData("production/empty", "No observed production in the selected window. Try a longer observation window.", 0));
         }
 
         public void ClosePopup() => ClosePopup(true);
         public void ClosePopup(bool playSound)
         {
+            advStability.Clear();
             if (!gameObject.activeSelf) return;
             if (playSound) FoundationApi.UiAccess.PlaySound(GameUiSound.WindowClose);
             gameObject.SetActive(false);
@@ -288,6 +320,8 @@ namespace KingdomGlobalLedger
         internal void CollapseAll()
         {
             expanded.Clear();
+            collapsedCategories.Add("category/currencies");
+            collapsedCategories.Add("category/production");
             ResetScroll();
             RefreshNow();
         }
@@ -305,39 +339,66 @@ namespace KingdomGlobalLedger
         public enum ViewMode { Basic, Adv }
         public enum TimeUnit { Sec, Min, Hour }
         public Action OnPopupClosed;
-        internal const float Width = 840, Height = 760, RowHeight = 36;
-        internal const float IncomeX = 300, OutflowX = 430, NetX = 560, CellWidth = 122, ViewX = 700;
+        internal const float Width = 900, Height = 760, RowHeight = 36;
+        internal const float IncomeX = 300, OutflowX = 460, NetX = 620, CellWidth = 144, ViewX = 768;
         LedgerBook book;
         LedgerUi ui;
         Button anchor;
-        RectTransform overlay, panel, content, viewport, controls, track;
+        RectTransform overlay, panel, content, viewport, controls, track, divider;
         TMP_Text status, footer, title;
         TMP_InputField searchInput;
         Button basicButton, advButton, secButton, minButton, hourButton, rollingButton;
-        Button currencies, production, showAllButton, collapseAll, sortButton, directionButton, refreshButton, freezeButton;
+        Button allTab, currenciesTab, productionTab, settingsToggle, collapseAll, refreshButton, freezeButton, nameHeading;
         readonly Button[] windowButtons = new Button[3];
         readonly TMP_Text[] columnHeadings = new TMP_Text[3];
         ScrollRect scroll;
+        readonly HashSet<string> collapsedCategories = new HashSet<string>();
         readonly HashSet<string> expanded = new HashSet<string>();
         readonly List<LedgerTreeRow> rows = new List<LedgerTreeRow>();
         readonly LedgerRowOrdering ordering = new LedgerRowOrdering();
         readonly LedgerSmoothing smoothing = new LedgerSmoothing();
+        readonly LedgerAdvStability advStability = new LedgerAdvStability();
+        readonly HashSet<string> advEmittedKeys = new HashSet<string>();
+        bool IsAdvOpen => viewMode == ViewMode.Adv && gameObject.activeSelf;
+
+        void RememberAdvChild(string parentKey, LedgerRowData row)
+        {
+            if (!IsAdvOpen) return;
+            advEmittedKeys.Add(row.Key);
+            advStability.RememberChild(parentKey, row);
+        }
+
+        bool EmitMissingAdvChildren(string parentKey)
+            => IsAdvOpen && advStability.EmitMissingChildren(parentKey, advEmittedKeys, VisibleRows, expanded, search);
         LedgerLocations locations => GlobalLedgerPlugin.Instance.Locations;
         internal readonly List<LedgerRowData> VisibleRows = new List<LedgerRowData>();
         IReadOnlyList<LedgerBookTotals> snapshot;
+        LedgerSnapshotIndex snapshotIndex;
+        GameItemType[] unlockedItems = Array.Empty<GameItemType>();
+        readonly Dictionary<string, GameItemType> unlockedItemById = new Dictionary<string, GameItemType>();
+        int firstBound = -1;
+        Vector2 fittedSize;
+        Vector3 fittedAnchor;
+        internal int RenderedRowCount => rows.Count;
         readonly Vector3[] anchorCorners = new Vector3[4];
-        float nextRefresh;
+        float nextRefresh, searchAfter;
+        string pendingSearch;
         double snapshotElapsed;
-        int tab, sortField, windowIndex, refreshSeconds = 1;
-        bool showAll, descending, frozen, controlsCollapsed;
+        int tab, sortField, refreshSeconds = 2;
+        readonly int[] windowIndexes = new int[3];
+        int windowIndex => windowIndexes[(int)timeUnit];
+        bool showAll, descending, frozen, controlsCollapsed = true;
         string search = "", selectedKey = "";
         ViewMode viewMode = ViewMode.Basic;
         TimeUnit timeUnit = TimeUnit.Min;
-        static readonly int[][] WindowOptions = { new[] { 1, 10, 30 }, new[] { 1, 5, 10 }, new[] { 1, 12, 24 } };
+        static readonly int[][] WindowOptions = { new[] { 1, 10, 30 }, new[] { 60, 300, 1800 }, new[] { 3600, 43200, 86400 } };
+        static readonly string[][] WindowLabels = { new[] { "1s", "10s", "30s" }, new[] { "1m", "5m", "30m" }, new[] { "1h", "12h", "24h" } };
         int UnitSeconds => timeUnit == TimeUnit.Sec ? 1 : timeUnit == TimeUnit.Hour ? 3600 : 60;
-        int WindowAmount => WindowOptions[(int)timeUnit][windowIndex];
-        int windowSeconds => WindowAmount * UnitSeconds;
-        float ControlsShift => controlsCollapsed ? 132 : 0;
+        int windowSeconds => WindowOptions[(int)timeUnit][windowIndex];
+        internal string WindowLabel => WindowLabels[(int)timeUnit][windowIndex];
+        internal int RefreshSeconds => refreshSeconds;
+        internal int SmoothingSamples => GlobalLedgerPlugin.Instance.EnableRollingAverage.Value ? Mathf.Clamp(GlobalLedgerPlugin.Instance.RollingAverageEntries.Value, 2, 30) : 0;
+        float ControlsShift => controlsCollapsed ? 84 : 0;
         internal int SelectedTab => tab;
         internal bool ShowingAll => showAll;
         internal ViewMode Mode => viewMode;
@@ -378,48 +439,55 @@ namespace KingdomGlobalLedger
             title = ui.Text(panel, "Title", "GLOBAL LEDGER", 24);
             title.color = LedgerUi.Gold;
             LedgerUi.Place(title.rectTransform, 24, 13, 320, 34);
-            Control(panel, "ControlsToggle", "Controls", ToggleControls, Width - 350, 14, 108);
-            basicButton = Control(panel, "BasicMode", "Basic", () => SetViewMode(ViewMode.Basic), Width - 232, 14, 74);
-            advButton = Control(panel, "AdvMode", "Adv", () => SetViewMode(ViewMode.Adv), Width - 152, 14, 74);
-            Control(panel, "Close", "X", ClosePopup, Width - 62, 14, 38);
+            settingsToggle = Control(panel, "ControlsToggle", "Show Settings", ToggleControls, 450, 14, 200, 15);
+            basicButton = Control(panel, "BasicMode", "Basic", () => SetViewMode(ViewMode.Basic), 662, 14, 82, 15);
+            advButton = Control(panel, "AdvMode", "Advanced", () => SetViewMode(ViewMode.Adv), 756, 14, 120, 15);
         }
 
         void CreateControls()
         {
             controls = LedgerUi.Rect(panel, "Controls");
-            LedgerUi.Place(controls, 0, 56, Width, 128);
-            secButton = Control(controls, "UnitSec", "sec", () => SetTimeUnit(TimeUnit.Sec), 24, 0, 58);
-            minButton = Control(controls, "UnitMin", "min", () => SetTimeUnit(TimeUnit.Min), 88, 0, 58);
-            hourButton = Control(controls, "UnitHour", "hour", () => SetTimeUnit(TimeUnit.Hour), 152, 0, 58);
+            LedgerUi.Place(controls, 0, 56, Width, 84);
+            var rateLabel = ui.Text(controls, "RateLabel", "RATE:", 17);
+            LedgerUi.Place(rateLabel.rectTransform, 24, 0, 64, 32);
+            secButton = Control(controls, "UnitSec", "Sec", () => SetTimeUnit(TimeUnit.Sec), 96, 0, 60, 15);
+            minButton = Control(controls, "UnitMin", "Min", () => SetTimeUnit(TimeUnit.Min), 164, 0, 60, 15);
+            hourButton = Control(controls, "UnitHour", "Hr", () => SetTimeUnit(TimeUnit.Hour), 232, 0, 60, 15);
             for (int i = 0; i < windowButtons.Length; i++)
             {
                 int option = i;
-                windowButtons[i] = Control(controls, "Window" + i, "", () => SetWindow(option), 24 + i * 64, 42, 58);
+                windowButtons[i] = Control(controls, "Window" + i, "", () => SetWindow(option), 320 + i * 86, 0, 78, 15);
             }
-            rollingButton = Control(controls, "RollingToggle", "", ToggleRollingAverage, 638, 0, 178);
-            freezeButton = Control(controls, "Freeze", "Freeze", ToggleFreeze, 690, 42, 126);
-            sortButton = Control(controls, "Sort", "", () => SetSort((sortField + 1) % LedgerRowOrdering.Fields.Length), 232, 0, 238);
-            directionButton = Control(controls, "Direction", "Ascending", () => SetDescending(!descending), 480, 0, 148);
-            refreshButton = Control(controls, "RefreshInterval", "", () => SetRefresh(refreshSeconds % 10 + 1), 232, 42, 180);
-            currencies = Control(controls, "CurrenciesTab", "Currencies", () => SelectTab(0), 424, 42, 120);
-            production = Control(controls, "ProductionTab", "Production", () => SelectTab(1), 552, 42, 126);
-            searchInput = ui.Search(controls, "Search", SetSearch);
-            LedgerUi.Place((RectTransform)searchInput.transform, 24, 84, 384, 32);
-            showAllButton = Control(controls, "ShowAll", "Show All", ToggleShowAll, 420, 84, 172);
-            collapseAll = Control(controls, "CollapseAll", "Collapse All", CollapseAll, 604, 84, 212);
+            freezeButton = Control(controls, "Freeze", "Freeze", ToggleFreeze, Width - 150, 0, 126, 15);
+            rollingButton = Control(controls, "RollingToggle", "", CycleSmoothing, 24, 42, 280, 15);
+            refreshButton = Control(controls, "RefreshInterval", "", () => SetRefresh(refreshSeconds % 4 + 1), 316, 42, 174, 15);
+            var hint = ui.Text(controls, "SmoothingHint", "Smoothing blends recent refreshes", 15);
+            LedgerUi.Place(hint.rectTransform, 502, 42, 374, 32);
+            searchInput = ui.Search(panel, "Search", ScheduleSearch);
+            allTab = Control(panel, "AllTab", "All", () => SelectTab(0), 24, 190, 68, 15);
+            currenciesTab = Control(panel, "CurrenciesTab", "Currencies", () => SelectTab(1), 104, 190, 144, 15);
+            productionTab = Control(panel, "ProductionTab", "Production", () => SelectTab(2), 260, 190, 144, 15);
+            collapseAll = Control(panel, "CollapseAll", "Collapse All", CollapseAll, 700, 190, 176, 15);
         }
 
         void CreateTable()
         {
             status = ui.Text(panel, "Window", "", 15);
             status.color = LedgerUi.Muted;
+            status.fontStyle = FontStyles.Italic;
+            divider = LedgerUi.Rect(panel, "TableDivider");
+            ui.Background(divider, new Color(.72f, .67f, .57f, .4f));
+            nameHeading = Control(panel, "NameHeading", "Tier / Name", () => SetSort(0), 24, 254, 230, 15);
+            PlainHeading(nameHeading);
             string[] names = { "IncomeHeading", "OutflowHeading", "NetHeading" };
             int[] fields = { 2, 3, 4 };
             for (int i = 0; i < names.Length; i++)
             {
                 int field = fields[i];
                 var button = Control(panel, names[i], "", () => SetSort(field), 24 + IncomeX + i * (OutflowX - IncomeX), 208, CellWidth, 15);
+                PlainHeading(button);
                 columnHeadings[i] = button.GetComponentInChildren<TMP_Text>();
+                columnHeadings[i].alignment = TextAlignmentOptions.MidlineRight;
             }
             viewport = LedgerUi.Rect(panel, "TreeViewport");
             ui.Background(viewport, new Color(0, 0, 0, .15f));
@@ -431,6 +499,7 @@ namespace KingdomGlobalLedger
             content.sizeDelta = Vector2.zero;
             scroll = viewport.gameObject.AddComponent<ScrollRect>();
             scroll.content = content;
+            scroll.onValueChanged.AddListener(_ => BindRows(false));
             scroll.viewport = viewport;
             scroll.horizontal = false;
             scroll.vertical = true;
@@ -452,10 +521,22 @@ namespace KingdomGlobalLedger
             footer.color = LedgerUi.Muted;
         }
 
-        void Fit()
+        static void PlainHeading(Button button)
+        {
+            var image = button.GetComponent<Image>();
+            image.sprite = null;
+            image.color = Color.clear;
+        }
+
+        void Fit() => FitLayout(false);
+
+        void FitLayout(bool force)
         {
             if (!anchor || !panel) return;
             ((RectTransform)anchor.transform).GetWorldCorners(anchorCorners);
+            if (!force && fittedSize == overlay.rect.size && fittedAnchor == anchorCorners[0]) return;
+            fittedSize = overlay.rect.size;
+            fittedAnchor = anchorCorners[0];
             Vector2 point = overlay.InverseTransformPoint(anchorCorners[0]);
             float top = Mathf.Round(Mathf.Max(8, overlay.rect.yMax - point.y + 8));
             float maximumHeight = Height - ControlsShift;
@@ -465,15 +546,23 @@ namespace KingdomGlobalLedger
             float height = Mathf.Floor(Mathf.Min(maximumHeight, overlay.rect.height - top - 12));
             float x = Mathf.Round(Mathf.Clamp(point.x - overlay.rect.xMin, 10, Mathf.Max(10, overlay.rect.width - Width - 10)));
             LedgerUi.Place(panel, x, top, Width, height);
+            LedgerUi.Place((RectTransform)nameHeading.transform, 24, 286 - ControlsShift, 230, 28);
             // Match original V1: preserve the native pixel font/art scale and scroll
             // through fewer rows on shorter canvases instead of shrinking the panel.
             panel.localScale = Vector3.one;
             controls.gameObject.SetActive(!controlsCollapsed);
-            LedgerUi.Place(status.rectTransform, 24, 186 - ControlsShift, Width - 48, 22);
+            LedgerUi.Place((RectTransform)searchInput.transform, 24, 148 - ControlsShift, Width - 48, 32);
+            LedgerUi.Place((RectTransform)allTab.transform, 24, 190 - ControlsShift, 68, 32);
+            LedgerUi.Place((RectTransform)currenciesTab.transform, 104, 190 - ControlsShift, 144, 32);
+            LedgerUi.Place((RectTransform)productionTab.transform, 260, 190 - ControlsShift, 144, 32);
+            LedgerUi.Place((RectTransform)collapseAll.transform, 700, 190 - ControlsShift, 176, 32);
+            LedgerUi.Place(status.rectTransform, 24, 232 - ControlsShift, Width - 48, 44);
+            LedgerUi.Place(divider, 24, 280 - ControlsShift, Width - 48, 1);
             for (int i = 0; i < columnHeadings.Length; i++)
-                LedgerUi.Place((RectTransform)columnHeadings[i].transform.parent, 24 + IncomeX + i * (OutflowX - IncomeX), 210 - ControlsShift, CellWidth, 28);
-            LedgerUi.Place(viewport, 24, 242 - ControlsShift, Width - 72, Mathf.Max(1, height - 304 + ControlsShift));
-            LedgerUi.Place(track, Width - 40, 242 - ControlsShift, 10, Mathf.Max(1, height - 304 + ControlsShift));
+                LedgerUi.Place((RectTransform)columnHeadings[i].transform.parent, 24 + (viewMode == ViewMode.Basic && i == 2 ? IncomeX : IncomeX + i * (OutflowX - IncomeX)), 286 - ControlsShift,
+                    viewMode == ViewMode.Basic && i == 2 ? NetX + CellWidth - IncomeX : CellWidth, 28);
+            LedgerUi.Place(viewport, 24, 318 - ControlsShift, Width - 72, Mathf.Max(1, height - 380 + ControlsShift));
+            LedgerUi.Place(track, Width - 40, 318 - ControlsShift, 10, Mathf.Max(1, height - 380 + ControlsShift));
             LedgerUi.Place(footer.rectTransform, 24, height - 48, Width - 48, 28);
         }
 
@@ -484,37 +573,55 @@ namespace KingdomGlobalLedger
             {
                 snapshot = book.Snapshot(windowSeconds);
                 snapshotElapsed = book.Elapsed;
+                snapshotIndex = new LedgerSnapshotIndex(snapshot);
                 nextRefresh = Time.unscaledTime + refreshSeconds;
             }
             UpdateControls();
             VisibleRows.Clear();
+            if (tab != 1 && (sample || unlockedItems.Length == 0))
+            {
+                unlockedItems = LedgerUi.OrderedUnlockedItems().ToArray();
+                unlockedItemById.Clear();
+                foreach (var item in unlockedItems) unlockedItemById[item.Identifier] = item;
+            }
+            advEmittedKeys.Clear();
             if (viewMode == ViewMode.Basic) BuildBasic();
-            else if (tab == 0) BuildCurrencies();
-            else BuildProduction();
+            else
+            {
+                if (tab != 2 && AddCategory("currencies", "CURRENCIES", -1)) BuildCurrencies();
+                if (tab != 1 && AddCategory("production", "PRODUCTION", -1)) BuildProduction();
+            }
             if (GlobalLedgerPlugin.Instance?.EnableRollingAverage?.Value == true)
-                smoothing.Apply(VisibleRows, Mathf.Clamp(GlobalLedgerPlugin.Instance.RollingAverageEntries.Value, 2, 30), sample);
-            var ordered = ordering.Arrange(VisibleRows, search, sortField, descending);
+                smoothing.Apply(VisibleRows, SmoothingSamples, sample);
+            var ordered = ordering.Arrange(VisibleRows, search, sortField, descending, IsAdvOpen ? advStability.OrderRank : null);
             VisibleRows.Clear();
             VisibleRows.AddRange(ordered);
+            if (IsAdvOpen) advStability.RecordOrder(VisibleRows);
             BindRows();
-            status.text = "Last " + WindowAmount + (timeUnit == TimeUnit.Sec ? "s" : timeUnit == TimeUnit.Hour ? "h" : "m")
-                + " | Rates " + LedgerUi.TimeUnitSuffix(timeUnit) + (frozen ? " | FROZEN" : " | Live")
-                + (snapshotElapsed < windowSeconds ? " | Collecting " + (int)snapshotElapsed + "/" + windowSeconds + "s" : "");
+            string smooth = SmoothingSamples == 0 ? "OFF" : SmoothingSamples + " samples";
+            status.text = (frozen ? "Frozen" : "Live") + ". Last " + WindowLabel + ", smoothing: " + smooth + ". Refresh every " + refreshSeconds + "s."
+                + (snapshotElapsed < windowSeconds ? "\nCollecting history: " + (int)snapshotElapsed + "/" + windowSeconds + "s." : "");
             int count = VisibleRows.Count(row => !row.IsHeader && (row.GameCurrency.HasValue || row.Item != null));
             footer.text = count == 0 && search.Length != 0 ? "No matching resources or sources."
-                : count + " rows | In: made/earned. Out: used/spent. Sort by heading; View locates.";
+                : "Headings sort; Resource resets. Gold: g=gold, s=silver, c=copper.";
         }
 
-        void BindRows()
+        void BindRows(bool force = true)
         {
-            for (int i = 0; i < VisibleRows.Count; i++)
-            {
-                VisibleRows[i].Top = i * RowHeight;
-                while (rows.Count <= i) rows.Add(new LedgerTreeRow(this, ui, content, rows.Count));
-                rows[i].Bind(VisibleRows[i], Width - 72);
-            }
-            for (int i = VisibleRows.Count; i < rows.Count; i++) rows[i].Root.gameObject.SetActive(false);
+            int capacity = Mathf.Max(1, Mathf.CeilToInt(viewport.rect.height / RowHeight) + 2);
+            int first = Mathf.Clamp(Mathf.FloorToInt(content.anchoredPosition.y / RowHeight), 0, Mathf.Max(0, VisibleRows.Count - 1));
+            if (!force && first == firstBound) return;
+            firstBound = first;
             content.sizeDelta = new Vector2(0, VisibleRows.Count * RowHeight + 8);
+            int count = Mathf.Min(capacity, VisibleRows.Count - first);
+            for (int i = 0; i < count; i++)
+            {
+                var data = VisibleRows[first + i];
+                data.Top = (first + i) * RowHeight;
+                while (rows.Count <= i) rows.Add(new LedgerTreeRow(this, ui, content, rows.Count));
+                rows[i].Bind(data, Width - 72);
+            }
+            for (int i = count; i < rows.Count; i++) rows[i].Root.gameObject.SetActive(false);
         }
 
         static void Select(Button button, bool active) => button.GetComponentInChildren<TMP_Text>().color = active ? LedgerUi.Gold : LedgerUi.Paper;
@@ -525,42 +632,82 @@ namespace KingdomGlobalLedger
             Select(secButton, timeUnit == TimeUnit.Sec);
             Select(minButton, timeUnit == TimeUnit.Min);
             Select(hourButton, timeUnit == TimeUnit.Hour);
-            Select(currencies, tab == 0);
-            Select(production, tab == 1);
-            Select(showAllButton, showAll);
+            Select(allTab, tab == 0);
+            Select(currenciesTab, tab == 1);
+            Select(productionTab, tab == 2);
+            settingsToggle.GetComponentInChildren<TMP_Text>().text = controlsCollapsed ? "Show Settings" : "Hide Settings";
             bool rolling = GlobalLedgerPlugin.Instance?.EnableRollingAverage?.Value == true;
-            Select(rollingButton, rolling);
-            rollingButton.GetComponentInChildren<TMP_Text>().text = "Average: " + (rolling ? "On" : "Off");
-            freezeButton.GetComponentInChildren<TMP_Text>().text = frozen ? "Resume" : "Freeze";
-            sortButton.GetComponentInChildren<TMP_Text>().text = "Sort: " + LedgerRowOrdering.Fields[sortField];
-            directionButton.GetComponentInChildren<TMP_Text>().text = descending ? "Descending" : "Ascending";
+            rollingButton.GetComponentInChildren<TMP_Text>().text = "Smooth: " + (rolling ? SmoothingSamples.ToString() : "OFF");
+            freezeButton.GetComponentInChildren<TMP_Text>().text = frozen ? "Unfreeze" : "Freeze";
             refreshButton.GetComponentInChildren<TMP_Text>().text = "Refresh: " + refreshSeconds + "s";
-            currencies.gameObject.SetActive(viewMode == ViewMode.Adv);
-            production.gameObject.SetActive(viewMode == ViewMode.Adv);
             collapseAll.gameObject.SetActive(viewMode == ViewMode.Adv);
+            nameHeading.interactable = true;
+            nameHeading.GetComponentInChildren<TMP_Text>().text = "RESOURCE";
             for (int i = 0; i < windowButtons.Length; i++)
             {
                 Select(windowButtons[i], windowIndex == i);
-                windowButtons[i].GetComponentInChildren<TMP_Text>().text = WindowOptions[(int)timeUnit][i] + (timeUnit == TimeUnit.Sec ? "s" : timeUnit == TimeUnit.Hour ? "h" : "m");
+                windowButtons[i].GetComponentInChildren<TMP_Text>().text = WindowLabels[(int)timeUnit][i];
             }
-            string suffix = LedgerUi.TimeUnitSuffix(timeUnit);
-            columnHeadings[0].text = "IN " + suffix;
-            columnHeadings[1].text = "OUT " + suffix;
-            columnHeadings[2].text = "NET " + suffix;
+            string[] labels = { "IN", "OUT", "NET" };
+            for (int i = 0; i < columnHeadings.Length; i++)
+            {
+                var button = columnHeadings[i].transform.parent.GetComponent<Button>();
+                button.gameObject.SetActive(viewMode == ViewMode.Adv || i == 2);
+                button.interactable = true;
+                columnHeadings[i].text = labels[i] + "/" + (timeUnit == TimeUnit.Sec ? "Sec" : timeUnit == TimeUnit.Min ? "Min" : "Hr")
+                    + (sortField == i + 2 ? descending ? " v" : " ^" : "");
+            }
         }
 
         void ResetScroll() { scroll.StopMovement(); content.anchoredPosition = Vector2.zero; }
-        internal void SetWindow(int index) { windowIndex = Mathf.Clamp(index, 0, 2); InvalidateWindow(); }
+        internal void SetWindow(int index) { windowIndexes[(int)timeUnit] = Mathf.Clamp(index, 0, 2); InvalidateWindow(); }
         void InvalidateWindow() { smoothing.Clear(); snapshot = null; RefreshNow(); }
-        internal void SetRefresh(int seconds) { refreshSeconds = Mathf.Clamp(seconds, 1, 10); nextRefresh = Time.unscaledTime + refreshSeconds; RefreshNow(); }
+        internal void SetRefresh(int seconds) { refreshSeconds = Mathf.Clamp(seconds, 1, 4); nextRefresh = Time.unscaledTime + refreshSeconds; RefreshNow(); }
         internal void ToggleFreeze() { frozen = !frozen; if (!frozen) nextRefresh = 0; RefreshNow(); }
-        internal void SetSearch(string value) { search = value ?? ""; ResetScroll(); RefreshNow(); }
-        internal void SetSort(int field) { if (field == sortField) descending = !descending; else sortField = Mathf.Clamp(field, 0, LedgerRowOrdering.Fields.Length - 1); RefreshNow(); }
-        internal void SetDescending(bool value) { descending = value; RefreshNow(); }
-        internal void ToggleControls() { controlsCollapsed = !controlsCollapsed; Fit(); }
-        internal void SelectTab(int value) { tab = value; ResetScroll(); RefreshNow(); }
+        void ScheduleSearch(string value) { pendingSearch = value ?? ""; searchAfter = Time.unscaledTime + .15f; }
+        internal void SetSearch(string value) { pendingSearch = null; search = value ?? ""; if (search.Length != 0) collapsedCategories.Clear(); ResetScroll(); RefreshNow(); }
+        internal void SetSort(int field)
+        {
+            advStability.ResetOrder();
+            if (field <= 1) { sortField = 0; descending = false; }
+            else if (sortField != field) { sortField = Mathf.Clamp(field, 2, 4); descending = true; }
+            else if (descending) descending = false;
+            else { sortField = 0; descending = false; }
+            RefreshNow();
+        }
+        internal void SetDescending(bool value) { advStability.ResetOrder(); descending = value; RefreshNow(); }
+        internal void ToggleControls() { controlsCollapsed = !controlsCollapsed; UpdateControls(); FitLayout(true); BindRows(); }
+        internal void SelectTab(int value) { tab = Mathf.Clamp(value, 0, 2); ResetScroll(); RefreshNow(); }
         internal void SetTimeUnit(TimeUnit unit) { if (timeUnit == unit) return; timeUnit = unit; InvalidateWindow(); }
-        internal void SetViewMode(ViewMode mode) { viewMode = mode; ResetScroll(); RefreshNow(); }
+        internal void SetViewMode(ViewMode mode)
+        {
+            if (viewMode == mode) return;
+            viewMode = mode;
+            advStability.ResetOrder();
+            if (viewMode == ViewMode.Basic && sortField != 4) { sortField = 0; descending = false; }
+            FitLayout(true); ResetScroll(); RefreshNow();
+        }
+        internal void CycleSmoothing()
+        {
+            int current = SmoothingSamples;
+            SetSmoothing(current == 0 ? 2 : current >= 5 ? 0 : current + 1);
+        }
+
+        internal void SetSmoothing(int samples)
+        {
+            smoothing.Clear();
+            var plugin = GlobalLedgerPlugin.Instance;
+            plugin.EnableRollingAverage.Value = samples > 0;
+            if (samples > 0) plugin.RollingAverageEntries.Value = Mathf.Clamp(samples, 2, 30);
+            RefreshNow();
+        }
+
+        internal void ToggleCategory(string key)
+        {
+            if (!collapsedCategories.Add(key)) collapsedCategories.Remove(key);
+            ResetScroll(); RefreshNow();
+        }
+
         internal void ToggleRollingAverage()
         {
             smoothing.Clear();
@@ -578,11 +725,18 @@ namespace KingdomGlobalLedger
             nextRefresh = 0;
             gameObject.SetActive(true);
         }
-        void OnEnable() { if (book != null) { transform.SetAsLastSibling(); Fit(); RefreshNow(); } }
+        void OnEnable()
+        {
+            if (book == null) return;
+            if (pendingSearch != null) { search = pendingSearch; pendingSearch = null; }
+            transform.SetAsLastSibling(); FitLayout(true); RefreshNow();
+        }
+        void OnDisable() => advStability.Clear();
         internal void ResetTree()
         {
-            expanded.Clear(); smoothing.Clear(); snapshot = null; frozen = false; showAll = false;
-            search = ""; searchInput.SetTextWithoutNotify(""); ResetScroll();
+            advStability.Clear();
+            expanded.Clear(); collapsedCategories.Clear(); smoothing.Clear(); snapshot = null; frozen = false; showAll = false;
+            search = ""; pendingSearch = null; searchInput.SetTextWithoutNotify(""); ResetScroll();
         }
         void Update()
         {
@@ -594,6 +748,7 @@ namespace KingdomGlobalLedger
             }
             if (transform.GetSiblingIndex() != transform.parent.childCount - 1) transform.SetAsLastSibling();
             Fit();
+            if (pendingSearch != null && Time.unscaledTime >= searchAfter) { SetSearch(pendingSearch); return; }
             if (!frozen && Time.unscaledTime >= nextRefresh) RefreshNow();
         }
         internal void View(LedgerRowData row) { if (row?.Target != null) GlobalLedgerPlugin.Instance.Navigation.Focus(row.Target); }
