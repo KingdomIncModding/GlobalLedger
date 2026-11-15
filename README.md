@@ -1,6 +1,6 @@
 # Global Ledger
 
-**Global Ledger 0.1.16 — for Kingdom Inc game version 1.0.14.**
+**Global Ledger 0.1.17 — for Kingdom Inc game version 1.0.14.**
 
 [GitHub releases](https://github.com/KingdomIncModding/GlobalLedger/releases) · [Nexus Mods](https://www.nexusmods.com/kingdominc/mods/19)
 
@@ -42,12 +42,12 @@ Rates reflect actual production and financial activity over the selected observa
 
 - Kingdom Inc (Windows x64 Mono)
 - [BepInEx 5](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.6) (5.4.23.6 or newer)
-- [Foundation](https://www.nexusmods.com/kingdominc/mods/18) (0.14.2 or newer)
+- [Foundation](https://www.nexusmods.com/kingdominc/mods/18) (0.14.4 or newer)
 
 ## Installation
 
 1. Install BepInEx 5 for Kingdom Inc.
-2. Install Foundation (0.14.2 or newer).
+2. Install Foundation (0.14.4 or newer).
 3. Extract the release ZIP into your Kingdom Inc game directory.
 4. Verify the file exists at `BepInEx/plugins/GlobalLedger/GlobalLedger.dll`.
 5. Launch the game and access Global Ledger from the top Mod Bar!

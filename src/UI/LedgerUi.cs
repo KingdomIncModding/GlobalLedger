@@ -83,6 +83,8 @@ namespace KingdomGlobalLedger
 
         internal static string FormatAmount(double value, bool signed = false)
         {
+            if (double.IsNaN(value)) return "0.00";
+            if (double.IsInfinity(value)) return value > 0 ? "+Out of range" : "-Out of range";
             double rounded = Math.Round(value, 2, MidpointRounding.AwayFromZero);
             if (rounded == 0) rounded = 0;
             return (signed && rounded > 0 ? "+" : "") + rounded.ToString("#,0.00", CultureInfo.InvariantCulture);
@@ -252,20 +254,20 @@ namespace KingdomGlobalLedger
         {
             if (divisor <= 0)
                 divisor = 1;
-            long scaled;
+            double scaledDouble;
             switch (unit)
             {
                 case LedgerPanel.TimeUnit.Sec:
-                    scaled = divisor > 1 ? (long)Math.Round((double)value / divisor) : (long)Math.Round(value / 60.0);
+                    scaledDouble = divisor > 1 ? (double)value / divisor : value / 60.0;
                     break;
                 case LedgerPanel.TimeUnit.Hour:
-                    scaled = divisor > 1 ? (long)Math.Round(((double)value / divisor) * 60.0) : value * 60;
+                    scaledDouble = divisor > 1 ? ((double)value / divisor) * 60.0 : value * 60.0;
                     break;
                 default:
-                    scaled = divisor > 1 ? (long)Math.Round((double)value / divisor) : value;
+                    scaledDouble = divisor > 1 ? (double)value / divisor : value;
                     break;
             }
-
+            long scaled = scaledDouble >= long.MaxValue ? long.MaxValue : scaledDouble <= long.MinValue ? long.MinValue : (long)Math.Round(scaledDouble);
             return SplitGold(scaled);
         }
 

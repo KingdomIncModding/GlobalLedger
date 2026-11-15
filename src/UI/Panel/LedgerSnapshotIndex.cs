@@ -15,20 +15,20 @@ namespace KingdomGlobalLedger
             {
                 for (int c = 0; c < LedgerBook.CurrencyCount; c++)
                 {
-                    Totals.Earned[c] += source.Earned[c];
-                    Totals.Spent[c] += source.Spent[c];
+                    Totals.AddEarned(c, source.EarnedAt(c));
+                    Totals.AddSpent(c, source.SpentAt(c));
                 }
-                foreach (var item in source.ItemEarned)
+                foreach (var item in source.EarnedItems)
                 {
-                    Totals.ItemEarned.TryGetValue(item.Key, out long previous);
-                    Totals.ItemEarned[item.Key] = previous + item.Value;
-                    if (item.Value != 0) Add(item.Key, source);
+                    if (item.Value == 0m) continue;
+                    Totals.AddItemProduced(item.Key, item.Value);
+                    Add(item.Key, source);
                 }
-                foreach (var item in source.ItemSpent)
+                foreach (var item in source.SpentItems)
                 {
-                    Totals.ItemSpent.TryGetValue(item.Key, out long previous);
-                    Totals.ItemSpent[item.Key] = previous + item.Value;
-                    if (item.Value != 0 && source.ItemProduced(item.Key) == 0) Add(item.Key, source);
+                    if (item.Value == 0m) continue;
+                    Totals.AddItemConsumed(item.Key, item.Value);
+                    if (source.ItemProduced(item.Key) == 0m) Add(item.Key, source);
                 }
             }
         }

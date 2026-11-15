@@ -8,7 +8,7 @@ using UnityEngine;
 namespace KingdomGlobalLedger
 {
     [BepInPlugin(Id, "Global Ledger", Version)]
-    [BepInDependency("urakka.kingdominc.foundation", "0.14.2")]
+    [BepInDependency("urakka.kingdominc.foundation", "0.14.4")]
     public sealed class GlobalLedgerPlugin : BaseUnityPlugin
     {
         void Awake()
@@ -41,13 +41,25 @@ namespace KingdomGlobalLedger
             }
         }
 
-        public const string Id = "urakka.kingdominc.globalledger", Version = "0.1.16";
+        public const string Id = "urakka.kingdominc.globalledger", Version = "0.1.17";
         internal static GlobalLedgerPlugin Instance;
         internal readonly LedgerBook Book = new LedgerBook(() => Time.realtimeSinceStartupAsDouble);
         internal readonly LedgerLocations Locations = new LedgerLocations();
         internal LedgerPanel Panel;
         internal LedgerNavigation Navigation;
         internal FoundationModContext Context;
+        static BepInEx.Logging.ManualLogSource fallbackLogger;
+        internal static void LogWarningMessage(string message)
+        {
+            if (Instance != null)
+            {
+                Instance.Logger.LogWarning(message);
+                return;
+            }
+            if (fallbackLogger == null)
+                fallbackLogger = BepInEx.Logging.Logger.CreateLogSource("Global Ledger");
+            fallbackLogger.LogWarning(message);
+        }
         internal ConfigEntry<bool> EnableRollingAverage;
         internal ConfigEntry<int> RollingAverageEntries;
         System.Collections.Generic.List<IDisposable> hooks = new System.Collections.Generic.List<IDisposable>();

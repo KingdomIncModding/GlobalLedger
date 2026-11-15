@@ -1,20 +1,32 @@
+using BepInEx.Logging;
 using KingdomFoundation.Api;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
-using System.Text.RegularExpressions;
+using UnityEngine;
 
 namespace KingdomGlobalLedger
 {
     internal static class LedgerObserver
     {
-        internal static void AddCount(Dictionary<string, long> map, string key, long delta)
+        sealed class ErrorThrottleState
+        {
+            internal double LastLoggedTime;
+            internal int SuppressedCount;
+        }
+
+        const double ErrorLogCooldownSeconds = 10.0;
+        const int MaxErrorKeys = 64;
+        static readonly Dictionary<string, ErrorThrottleState> errorThrottles = new Dictionary<string, ErrorThrottleState>(StringComparer.Ordinal);
+        internal static int WarningLogsEmitted { get; private set; }
+        internal static int WarningLogsSuppressed { get; private set; }
+
+        internal static void AddCount(Dictionary<string, decimal> map, string key, decimal delta)
         {
             if (string.IsNullOrEmpty(key) || key == "dummy_passthrough")
                 return;
             map.TryGetValue(key, out var existing);
-            map[key] = existing + delta;
+            map[key] = LedgerMath.AddSaturated(existing, delta);
         }
 
         internal static long ObservedScopes, SkippedScopes, RecordedBatches;
@@ -34,6 +46,7 @@ namespace KingdomGlobalLedger
             frame.Element = element;
             frame.Plan = plan;
             frame.CaptureOutputs = plan.CaptureOutputs(element);
+            frame.CustomNode = element.Behaviour != null;
             frame.Parent = current;
             frame.Player = FoundationApi.Kingdom;
             Array.Clear(frame.Income, 0, 9);
@@ -41,6 +54,7 @@ namespace KingdomGlobalLedger
             Array.Clear(frame.Tray, 0, 9);
             frame.OutputsBefore.Clear();
             frame.VisitorsBefore.Clear();
+            frame.ConsumedCandidates.Clear();
             frame.Produced.Clear();
             frame.Consumed.Clear();
             if (plan.Till)
@@ -69,10 +83,10 @@ namespace KingdomGlobalLedger
                     return;
                 if (frame.Plan.Till)
                 {
-                    frame.Income[0] += frame.Element.Production.CollectedCurrency(GameCurrency.Gold) - frame.Tray[0];
-                    frame.Income[1] += frame.Element.Production.CollectedCurrency(GameCurrency.Requisition) - frame.Tray[1];
-                    frame.Income[4] += frame.Element.Production.CollectedCurrency(GameCurrency.Mana) - frame.Tray[4];
-                    frame.Income[5] += frame.Element.Production.CollectedCurrency(GameCurrency.Crown) - frame.Tray[5];
+                    frame.Income[0] = LedgerMath.AddSaturated(frame.Income[0], frame.Element.Production.CollectedCurrency(GameCurrency.Gold) - frame.Tray[0]);
+                    frame.Income[1] = LedgerMath.AddSaturated(frame.Income[1], frame.Element.Production.CollectedCurrency(GameCurrency.Requisition) - frame.Tray[1]);
+                    frame.Income[4] = LedgerMath.AddSaturated(frame.Income[4], frame.Element.Production.CollectedCurrency(GameCurrency.Mana) - frame.Tray[4]);
+                    frame.Income[5] = LedgerMath.AddSaturated(frame.Income[5], frame.Element.Production.CollectedCurrency(GameCurrency.Crown) - frame.Tray[5]);
                 }
                 SnapshotItemsAfter(frame.Element, frame);
                 if (GlobalLedgerPlugin.Instance.Book.RecordBatch(frame))
@@ -84,8 +98,10 @@ namespace KingdomGlobalLedger
                 frame.Parent = null;
                 frame.Player = null;
                 frame.Plan = null;
+                frame.CustomNode = false;
                 frame.OutputsBefore.Clear();
                 frame.VisitorsBefore.Clear();
+                frame.ConsumedCandidates.Clear();
                 frame.RemainingVisitors.Clear();
                 frame.Produced.Clear();
                 frame.Consumed.Clear();
@@ -116,9 +132,10 @@ namespace KingdomGlobalLedger
                     LedgerWarProgressPatch.Finalizer(call.Exception);
                 }
             }));
+            LedgerCustomNodeHooks.Install(hooks);
         }
 
-        static Exception Leave(LedgerFrame __state, Exception __exception)
+        internal static Exception Leave(LedgerFrame __state, Exception __exception)
         {
             try
             {
@@ -126,19 +143,45 @@ namespace KingdomGlobalLedger
             }
             catch (Exception error)
             {
-                BepInEx.Logging.Logger.CreateLogSource("Global Ledger").LogWarning(error);
+                ReportObserverError(__state?.Element, error);
             }
 
             return __exception;
         }
 
-        static void ReadTray(WorkspaceObject element, long[] tray)
+        static void ReportObserverError(WorkspaceObject element, Exception error)
+        {
+            string typeId = element?.TypeId ?? "unknown";
+            string guid = element?.Guid ?? "none";
+            string key = error.GetType().FullName + "|" + typeId;
+            double now = Time.realtimeSinceStartupAsDouble;
+            if (!errorThrottles.TryGetValue(key, out var state))
+            {
+                if (errorThrottles.Count >= MaxErrorKeys)
+                    errorThrottles.Clear();
+                errorThrottles[key] = state = new ErrorThrottleState { LastLoggedTime = double.NegativeInfinity };
+            }
+            if (now - state.LastLoggedTime < ErrorLogCooldownSeconds)
+            {
+                state.SuppressedCount++;
+                WarningLogsSuppressed++;
+                return;
+            }
+            int suppressed = state.SuppressedCount;
+            state.SuppressedCount = 0;
+            state.LastLoggedTime = now;
+            WarningLogsEmitted++;
+            string suffix = suppressed > 0 ? " (suppressed " + suppressed + " repeated errors)" : "";
+            GlobalLedgerPlugin.LogWarningMessage("Accounting error for " + typeId + " [" + guid + "] at batch " + RecordedBatches + suffix + ": " + error);
+        }
+
+        static void ReadTray(WorkspaceObject element, decimal[] tray)
         {
             for (int c = 0; c < tray.Length; c++)
                 tray[c] = element.Production.CollectedCurrency((GameCurrency)c);
         }
 
-        static void RecordNewOutputs(WorkspaceObject element, LedgerFrame frame, int startOutput)
+        static void RecordNewOutputs(WorkspaceObject element, LedgerFrame frame, int startOutput, HashSet<GameInventoryItem> passthrough)
         {
             if (element.Outputs == null)
                 return;
@@ -148,7 +191,9 @@ namespace KingdomGlobalLedger
                 for (int j = 0; j < buffered.Count; j++)
                 {
                     var item = buffered[j];
-                    if (item?.Type != null && !frame.OutputsBefore.Contains(item) && item.Type.Identifier != "dummy_passthrough")
+                    if (item?.Type != null && !frame.OutputsBefore.Contains(item)
+                        && (passthrough == null || !passthrough.Contains(item))
+                        && item.Type.Identifier != "dummy_passthrough")
                         AddCount(frame.Produced, item.Type.Identifier, 1);
                 }
             }
@@ -158,6 +203,9 @@ namespace KingdomGlobalLedger
         {
             current = null;
             pool.Clear();
+            errorThrottles.Clear();
+            WarningLogsEmitted = 0;
+            WarningLogsSuppressed = 0;
             LedgerObservationPlan.Reset();
             LedgerSourceCache.Reset();
             ObservedScopes = SkippedScopes = RecordedBatches = 0;
@@ -195,8 +243,37 @@ namespace KingdomGlobalLedger
                 }
             }
 
+            HashSet<GameInventoryItem> passthrough = null;
+            if (frame.ConsumedCandidates.Count > 0)
+            {
+                var outputsNow = frame.RemainingVisitors;
+                outputsNow.Clear();
+                if (element.Outputs != null)
+                {
+                    for (int i = 0; i < element.Outputs.Count; i++)
+                    {
+                        var buffered = element.Outputs[i].BufferedItems;
+                        for (int j = 0; j < buffered.Count; j++)
+                            if (buffered[j] != null) outputsNow.Add(buffered[j]);
+                    }
+                }
+                for (int i = 0; i < frame.ConsumedCandidates.Count; i++)
+                {
+                    var consumedItem = frame.ConsumedCandidates[i];
+                    if (outputsNow.Contains(consumedItem) && !frame.OutputsBefore.Contains(consumedItem))
+                    {
+                        if (passthrough == null) passthrough = new HashSet<GameInventoryItem>();
+                        passthrough.Add(consumedItem);
+                    }
+                    else if (consumedItem?.Type != null)
+                    {
+                        AddCount(frame.Consumed, consumedItem.Type.Identifier, 1);
+                    }
+                }
+            }
+
             if (frame.CaptureOutputs)
-                RecordNewOutputs(element, frame, element.TypeId == "QuestBoard" ? 1 : 0);
+                RecordNewOutputs(element, frame, element.TypeId == "QuestBoard" ? 1 : 0, passthrough);
         }
 
         static void SnapshotItemsBefore(WorkspaceObject element, LedgerFrame frame)

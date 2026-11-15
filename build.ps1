@@ -1,9 +1,14 @@
 param(
-    [string]$GameRoot = (Join-Path $PSScriptRoot '..\..\..')
+    [string]$GameRoot = (Join-Path $PSScriptRoot '..\..')
 )
 
 $ErrorActionPreference = 'Stop'
 $gamePath = (Resolve-Path -LiteralPath $GameRoot).Path.TrimEnd('\', '/')
+foreach ($required in @('BepInEx\core', 'KingdomInc_Data\Managed')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $gamePath $required) -PathType Container)) {
+        throw "GameRoot does not appear to be a Kingdom Inc installation (missing $required): $gamePath"
+    }
+}
 $gamePathForBuild = $gamePath.Replace('\', '/') + '/'
 $project = Join-Path $PSScriptRoot 'GlobalLedger.csproj'
 

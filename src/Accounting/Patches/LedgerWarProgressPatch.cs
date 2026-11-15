@@ -48,7 +48,7 @@ namespace KingdomGlobalLedger
                         string warName = FoundationApi.GameInfo.Translate(war.DisplayName);
                         if (string.IsNullOrEmpty(warName) || warName.StartsWith("@"))
                             warName = war.DisplayName ?? war.Identifier;
-                        var source = new LedgerBookSource("war_" + war.Identifier, "War", warName, warName);
+                        var source = new LedgerBookSource("war_" + war.Identifier, "War", warName, warName, LedgerLocations.CurrentLocale, war.DisplayName);
                         GlobalLedgerPlugin.Instance.Book.Record(source, GameCurrency.Medal, warMedals, 0);
                     }
                 }

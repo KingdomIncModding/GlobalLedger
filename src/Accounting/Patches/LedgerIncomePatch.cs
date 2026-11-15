@@ -14,7 +14,7 @@ namespace KingdomGlobalLedger
             if (!isIncome || amt <= 0)
                 return;
             if (LedgerObserver.current != null && LedgerObserver.current.Player == __instance)
-                LedgerObserver.current.Income[(int)c] += amt;
+                LedgerObserver.current.Income[(int)c] = LedgerMath.AddSaturated(LedgerObserver.current.Income[(int)c], amt);
             else if (LedgerObserver.current == null)
                 LedgerWarProgressPatch.RecordIncome(c, amt);
         }

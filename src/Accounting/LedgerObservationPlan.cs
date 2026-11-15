@@ -25,7 +25,8 @@ namespace KingdomGlobalLedger
                     break;
             }
             var production = element.Production;
-            Outputs = production.IsResource || (production.IsRecipe && !production.HasEnhancementResult)
+            bool custom = element.Behaviour != null;
+            Outputs = custom || production.IsResource || (production.IsRecipe && !production.HasEnhancementResult)
                 || type == "Forest" || type == "Dungeon" || type == "WarEffort" || type == "DevSpawner" || type == "QuestBoard";
             Visitors = type == "TrainingGrounds" || type == "Arena" || type == "QuestBoard";
             // Unknown/custom types retain till observation. Only types known not to hold

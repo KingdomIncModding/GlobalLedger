@@ -20,7 +20,7 @@ namespace KingdomGlobalLedger
             else RefreshNow();
         }
 
-        LedgerRowData Add(string key, string label, int depth, GameCurrency currency, long amount, bool expandable, long income = 0, long outflow = 0)
+        LedgerRowData Add(string key, string label, int depth, GameCurrency currency, decimal amount, bool expandable, decimal income = 0, decimal outflow = 0)
         {
             var row = new LedgerRowData(key, label, depth)
             {
@@ -36,7 +36,7 @@ namespace KingdomGlobalLedger
             return row;
         }
 
-        LedgerRowData AddItem(string key, string label, int depth, GameItemType item, long amount, bool expandable, long income = 0, long outflow = 0)
+        LedgerRowData AddItem(string key, string label, int depth, GameItemType item, decimal amount, bool expandable, decimal income = 0, decimal outflow = 0)
         {
             var row = new LedgerRowData(key, label, depth)
             {
@@ -87,13 +87,13 @@ namespace KingdomGlobalLedger
                         continue;
                 }
 
-                long net = totals.Net(c);
+                decimal net = totals.Net(c);
                 var row = new LedgerRowData("basic/currency/" + c, LedgerUi.CurrencyName(currency), 1)
                 {
                     GameCurrency = currency,
                     Amount = net,
-                    Income = totals.Earned[c],
-                    Outflow = totals.Spent[c],
+                    Income = totals.EarnedAt(c),
+                    Outflow = totals.SpentAt(c),
                     Expandable = false,
                     Icon = currency.GetIcon()
                 };
@@ -131,7 +131,7 @@ namespace KingdomGlobalLedger
                         continue;
                 }
 
-                long net = totals.ItemNet(id);
+                decimal net = totals.ItemNet(id);
                 var row = new LedgerRowData("basic/item/" + id, LedgerUi.ItemName(item), 1)
                 {
                     Item = item,
@@ -163,7 +163,7 @@ namespace KingdomGlobalLedger
                 if (!showAll && !book.HasCurrencyActivity(c) && currency != GameCurrency.Gold) continue;
                 string root = "currency/" + c;
                 var active = snapshot.Where(t => t.Active(c)).ToArray();
-                Add(root, LedgerUi.CurrencyName(currency), 0, currency, active.Sum(t => t.Net(c)), true, active.Sum(t => t.Earned[c]), active.Sum(t => t.Spent[c]));
+                Add(root, LedgerUi.CurrencyName(currency), 0, currency, LedgerMath.Sum(active, t => t.Net(c)), true, LedgerMath.Sum(active, t => t.EarnedAt(c)), LedgerMath.Sum(active, t => t.SpentAt(c)));
                 if (!expanded.Contains(root) && string.IsNullOrEmpty(search))
                     continue;
                 if (active.Length == 0)
@@ -177,7 +177,7 @@ namespace KingdomGlobalLedger
                 {
                     string groupKey = root + "/" + group.Key;
                     var container = group.First();
-                    var containerRow = Add(groupKey, container.GroupName, 1, currency, group.Sum(t => t.Totals.Net(c)), true, group.Sum(t => t.Totals.Earned[c]), group.Sum(t => t.Totals.Spent[c]));
+                    var containerRow = Add(groupKey, container.GroupName, 1, currency, LedgerMath.Sum(group, t => t.Totals.Net(c)), true, LedgerMath.Sum(group, t => t.Totals.EarnedAt(c)), LedgerMath.Sum(group, t => t.Totals.SpentAt(c)));
                     containerRow.PrefixIcon = container.GroupTarget != null ? LedgerLocations.ContainerIcon() : null;
                     containerRow.Icon = container.GroupIcon;
                     containerRow.Target = container.GroupTarget;
@@ -188,7 +188,7 @@ namespace KingdomGlobalLedger
                     {
                         var building = entry.Totals;
                         string buildingKey = groupKey + "/" + building.Source.Id;
-                        var buildingRow = Add(buildingKey, entry.BuildingName, 2, currency, building.Net(c), true, building.Earned[c], building.Spent[c]);
+                        var buildingRow = Add(buildingKey, entry.BuildingName, 2, currency, building.Net(c), true, building.EarnedAt(c), building.SpentAt(c));
                         buildingRow.Icon = entry.BuildingIcon;
                         buildingRow.Target = entry.BuildingTarget;
                         RememberAdvChild(groupKey, buildingRow);
@@ -202,9 +202,9 @@ namespace KingdomGlobalLedger
                             continue;
                         bool any = false;
                         foreach (GameCurrency costCurrency in Enum.GetValues(typeof(GameCurrency)))
-                            if (building.Spent[(int)costCurrency] != 0 && costCurrency.IsUnlocked())
+                            if (building.SpentAt((int)costCurrency) != 0m && costCurrency.IsUnlocked())
                             {
-                                var cost = Add(costs + "/" + (int)costCurrency, LedgerUi.CurrencyName(costCurrency), 4, costCurrency, -building.Spent[(int)costCurrency], false, 0, building.Spent[(int)costCurrency]);
+                                var cost = Add(costs + "/" + (int)costCurrency, LedgerUi.CurrencyName(costCurrency), 4, costCurrency, -building.SpentAt((int)costCurrency), false, 0m, building.SpentAt((int)costCurrency));
                                 cost.Icon = costCurrency.GetIcon();
                                 RememberAdvChild(costs, cost);
                                 any = true;
@@ -247,7 +247,7 @@ namespace KingdomGlobalLedger
                 {
                     string groupKey = root + "/" + group.Key;
                     var container = group.First();
-                    var containerRow = AddItem(groupKey, container.GroupName, 1, item, group.Sum(t => t.Totals.ItemNet(id)), true, group.Sum(t => t.Totals.ItemProduced(id)), group.Sum(t => t.Totals.ItemConsumed(id)));
+                    var containerRow = AddItem(groupKey, container.GroupName, 1, item, LedgerMath.Sum(group, t => t.Totals.ItemNet(id)), true, LedgerMath.Sum(group, t => t.Totals.ItemProduced(id)), LedgerMath.Sum(group, t => t.Totals.ItemConsumed(id)));
                     containerRow.PrefixIcon = container.GroupTarget != null ? LedgerLocations.ContainerIcon() : null;
                     containerRow.Icon = container.GroupIcon;
                     containerRow.Target = container.GroupTarget;
@@ -271,12 +271,12 @@ namespace KingdomGlobalLedger
                         if (!expanded.Contains(costs) && string.IsNullOrEmpty(search))
                             continue;
                         bool any = false;
-                        foreach (var entryCost in building.ItemSpent)
+                        foreach (var entryCost in building.SpentItems)
                         {
-                            long spentItem = entryCost.Value;
-                            if (spentItem != 0 && unlockedItemById.TryGetValue(entryCost.Key, out var costItem))
+                            decimal spentItem = entryCost.Value;
+                            if (spentItem != 0m && unlockedItemById.TryGetValue(entryCost.Key, out var costItem))
                             {
-                                var cost = AddItem(costs + "/item/" + costItem.Identifier, LedgerUi.ItemName(costItem), 4, costItem, -spentItem, false, 0, spentItem);
+                                var cost = AddItem(costs + "/item/" + costItem.Identifier, LedgerUi.ItemName(costItem), 4, costItem, -spentItem, false, 0m, spentItem);
                                 cost.Icon = costItem.GetIcon();
                                 RememberAdvChild(costs, cost);
                                 any = true;
@@ -284,9 +284,9 @@ namespace KingdomGlobalLedger
                         }
 
                         foreach (GameCurrency costCurrency in Enum.GetValues(typeof(GameCurrency)))
-                            if (building.Spent[(int)costCurrency] != 0 && costCurrency.IsUnlocked())
+                            if (building.SpentAt((int)costCurrency) != 0m && costCurrency.IsUnlocked())
                             {
-                                var cost = Add(costs + "/currency/" + (int)costCurrency, LedgerUi.CurrencyName(costCurrency), 4, costCurrency, -building.Spent[(int)costCurrency], false, 0, building.Spent[(int)costCurrency]);
+                                var cost = Add(costs + "/currency/" + (int)costCurrency, LedgerUi.CurrencyName(costCurrency), 4, costCurrency, -building.SpentAt((int)costCurrency), false, 0m, building.SpentAt((int)costCurrency));
                                 cost.Icon = costCurrency.GetIcon();
                                 RememberAdvChild(costs, cost);
                                 any = true;
@@ -385,7 +385,7 @@ namespace KingdomGlobalLedger
         readonly int[] windowIndexes = new int[3];
         int windowIndex => windowIndexes[(int)timeUnit];
         bool showAll, descending, frozen, controlsCollapsed = true;
-        string search = "", selectedKey = "";
+        string search = "", selectedKey = "", lastLocale = "";
         ViewMode viewMode = ViewMode.Basic;
         TimeUnit timeUnit = TimeUnit.Min;
         static readonly int[][] WindowOptions = { new[] { 1, 10, 30 }, new[] { 60, 300, 1800 }, new[] { 3600, 43200, 86400 } };
@@ -407,7 +407,7 @@ namespace KingdomGlobalLedger
         internal string SelectedKey => selectedKey;
         internal bool ControlsCollapsed => controlsCollapsed;
         internal bool Frozen => frozen;
-        internal double Rate(long value) => (double)value / windowSeconds * UnitSeconds;
+        internal double Rate(decimal value) => LedgerMath.Rate(value, windowSeconds, UnitSeconds);
 
         void Initialize(LedgerBook book, Button anchor, RectTransform root)
         {
@@ -565,6 +565,16 @@ namespace KingdomGlobalLedger
 
         internal void RefreshNow()
         {
+            string locale = LedgerLocations.CurrentLocale;
+            bool localeChanged = lastLocale != locale;
+            if (localeChanged)
+            {
+                lastLocale = locale;
+                locations.Invalidate();
+                advStability.Clear();
+                smoothing.Clear();
+                snapshot = null;
+            }
             bool sample = snapshot == null || (!frozen && Time.unscaledTime >= nextRefresh);
             if (sample)
             {
@@ -575,7 +585,7 @@ namespace KingdomGlobalLedger
             }
             UpdateControls();
             VisibleRows.Clear();
-            if (tab != 1 && (sample || unlockedItems.Length == 0))
+            if (tab != 1 && (sample || localeChanged || unlockedItems.Length == 0))
             {
                 unlockedItems = LedgerUi.OrderedUnlockedItems().ToArray();
                 unlockedItemById.Clear();

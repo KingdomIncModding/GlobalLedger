@@ -12,7 +12,7 @@ namespace KingdomGlobalLedger
         internal static void Postfix(GameKingdom __instance, GameCurrency c, long amt, bool __result)
         {
             if (__result && amt > 0 && LedgerObserver.current != null && LedgerObserver.current.Player == __instance)
-                LedgerObserver.current.Spending[(int)c] += amt;
+                LedgerObserver.current.Spending[(int)c] = LedgerMath.AddSaturated(LedgerObserver.current.Spending[(int)c], amt);
         }
     }
 }

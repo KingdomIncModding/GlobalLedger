@@ -57,8 +57,8 @@ namespace KingdomGlobalLedger
                 if (hasA && rankA != rankB) return rankA.CompareTo(rankB);
             }
             if (field < 2) return a.Original.CompareTo(b.Original);
-            long av = field == 2 ? a.Root.Income : field == 3 ? a.Root.Outflow : a.Root.Amount;
-            long bv = field == 2 ? b.Root.Income : field == 3 ? b.Root.Outflow : b.Root.Amount;
+            decimal av = field == 2 ? a.Root.Income : field == 3 ? a.Root.Outflow : a.Root.Amount;
+            decimal bv = field == 2 ? b.Root.Income : field == 3 ? b.Root.Outflow : b.Root.Amount;
             int compare = av.CompareTo(bv);
             if (compare == 0) return a.Original.CompareTo(b.Original);
             return descending ? -compare : compare;

@@ -36,7 +36,7 @@ namespace KingdomGlobalLedger
 
         internal void Hide() => root.gameObject.SetActive(false);
 
-        internal void Bind(LedgerRowData row, long value, bool net, LedgerPanel owner, float x)
+        internal void Bind(LedgerRowData row, decimal value, bool net, LedgerPanel owner, float x)
         {
             bool visible = !row.IsHeader && (row.GameCurrency.HasValue || row.Item != null);
             root.gameObject.SetActive(visible);
@@ -44,7 +44,7 @@ namespace KingdomGlobalLedger
             float width = owner.Mode == LedgerPanel.ViewMode.Basic ? LedgerPanel.NetX + LedgerPanel.CellWidth - LedgerPanel.IncomeX : LedgerPanel.CellWidth;
             if (owner.Mode == LedgerPanel.ViewMode.Basic) x = LedgerPanel.IncomeX;
             LedgerUi.Place(root, x, 0, width, LedgerPanel.RowHeight - 1);
-            amount.color = net ? value > 0 ? LedgerUi.Gain : value < 0 ? LedgerUi.Loss : LedgerUi.Muted : LedgerUi.Paper;
+            amount.color = net ? value > 0m ? LedgerUi.Gain : value < 0m ? LedgerUi.Loss : LedgerUi.Muted : LedgerUi.Paper;
             double rate = owner.Rate(value);
             string unit = "";
             bool gold = row.GameCurrency == GameCurrency.Gold;

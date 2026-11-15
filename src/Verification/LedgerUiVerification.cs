@@ -210,7 +210,7 @@ namespace KingdomGlobalLedger.Verification
             Check(Math.Abs(panel.Rate(300) - 10) < .0001, "30-minute totals normalize correctly to a per-minute rate");
             panel.SetWindow(0);
             panel.ToggleFreeze();
-            long before = panel.VisibleRows.Single(row => row.Key == "basic/currency/4").Income;
+            decimal before = panel.VisibleRows.Single(row => row.Key == "basic/currency/4").Income;
             GlobalLedgerPlugin.Instance.Book.Record(source, GameCurrency.Mana, 20, 0);
             panel.RefreshNow();
             Check(panel.VisibleRows.Single(row => row.Key == "basic/currency/4").Income == before, "Freeze retains the displayed snapshot while recording continues");

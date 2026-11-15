@@ -345,7 +345,7 @@ namespace KingdomGlobalLedger.Verification
                 tempPanel.ToggleFreeze();
                 tempPanel.ToggleFreeze();
                 var afterRefreshOrder = tempPanel.VisibleRows.Where(r => r.Depth == 0 && r.Item != null).Select(r => r.Item.Identifier).ToArray();
-                long ingotIncome = tempPanel.VisibleRows.Single(r => r.Key == "item/iron_ingot").Income;
+                decimal ingotIncome = tempPanel.VisibleRows.Single(r => r.Key == "item/iron_ingot").Income;
                 Check(ingotIncome == 5020 && afterRefreshOrder.SequenceEqual(initialOrder),
                     "Advanced tab keeps row order locked across live refreshes while open");
 

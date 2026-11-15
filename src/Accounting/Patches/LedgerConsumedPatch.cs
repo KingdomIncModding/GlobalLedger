@@ -13,6 +13,8 @@ namespace KingdomGlobalLedger
         {
             if (element.Production.IsRecipe)
                 return inputIndex != 0 || !element.Production.HasEnhancementResult;
+            if (element.Behaviour != null)
+                return true;
             switch (element.TypeId)
             {
                 case "Shop":
@@ -50,7 +52,12 @@ namespace KingdomGlobalLedger
             }
 
             if (IsConsumedInput(element, index, __result))
-                LedgerObserver.AddCount(LedgerObserver.current.Consumed, __result.Type.Identifier, 1);
+            {
+                if (LedgerObserver.current.CustomNode)
+                    LedgerObserver.current.ConsumedCandidates.Add(__result);
+                else
+                    LedgerObserver.AddCount(LedgerObserver.current.Consumed, __result.Type.Identifier, 1);
+            }
         }
     }
 }
