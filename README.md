@@ -1,5 +1,7 @@
 # Global Ledger
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/S6V62AX30M)
+
 **Global Ledger 0.1.17 — for Kingdom Inc game version 1.0.14.**
 
 [GitHub releases](https://github.com/KingdomIncModding/GlobalLedger/releases) · [Nexus Mods](https://www.nexusmods.com/kingdominc/mods/19)
@@ -75,3 +77,9 @@ Close the game and delete `BepInEx/plugins/GlobalLedger/`. Accounting history is
 ## Credits and Source
 
 Created by **Urakka** (rockyamyx). [Source code on GitHub](https://github.com/KingdomIncModding/GlobalLedger). Game artwork belongs to its respective owners.
+
+## Support
+
+If you enjoy these Kingdom Inc mods and tools, consider supporting development on Ko-fi!
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/S6V62AX30M)
